@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { NuevoReclamoForm } from "@/components/nuevo-reclamo-form";
@@ -93,9 +94,14 @@ async function PanelAdmin({ nombre }: { nombre: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <p className="text-sm text-muted-foreground">Panel del administrador</p>
-        <h1 className="text-2xl font-bold">Hola, {nombre}</h1>
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <p className="text-sm text-muted-foreground">Panel del administrador</p>
+          <h1 className="text-2xl font-bold">Hola, {nombre}</h1>
+        </div>
+        <Link href="/protected/dashboard" className="text-sm underline">
+          Ver dashboard →
+        </Link>
       </div>
 
       <div className="rounded-md border p-4">
