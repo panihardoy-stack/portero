@@ -1,0 +1,102 @@
+{
+  "name": "Portero: resumen diario de reclamos demorados",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "2bb6901b-13d7-45a2-81db-a84d0c2c15ae",
+      "name": "Todos los días a las 9",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select count(*) as total,\n       string_agg(linea, chr(10) order by orden) filter (where orden <= 20) as lista\nfrom (\n  select row_number() over (order by r.created_at) as orden,\n         '- ' || e.nombre || ', unidad ' || u.nombre || ': ' || r.descripcion ||\n         ' (hace ' || extract(day from now() - r.created_at)::int || ' días, ' ||\n         case r.estado when 'nuevo' then 'sin revisar' else r.estado end || ')' as linea\n  from public.reclamos r\n  join public.unidades u on u.id = r.unidad_id\n  join public.edificios e on e.id = u.edificio_id\n  where r.estado <> 'resuelto'\n    and r.created_at < now() - interval '3 days'\n) demorados\nhaving count(*) > 0;",
+        "options": {}
+      },
+      "id": "5459f92a-87bb-4385-904c-d26ffb160c6f",
+      "name": "Buscar reclamos demorados",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "",
+          "name": "Supabase Portero"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "panihardoy@gmail.com",
+        "subject": "={{ $json.total }} reclamos abiertos hace más de 3 días",
+        "emailType": "text",
+        "message": "=Buen día. Estos reclamos siguen abiertos después de 3 días, empezando por los más viejos:\n\n{{ $json.lista }}\n{{ Number($json.total) > 20 ? 'Y ' + (Number($json.total) - 20) + ' más.' : '' }}\n\nRevisalos en https://portero-indol.vercel.app/protected",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "f237bb7b-310d-4863-9077-0374336b9d73",
+      "name": "Mail con el resumen",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        0
+      ],
+      "webhookId": "18ebc194-fe20-4b5e-bd85-ab957dd4d119",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail Portero"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Todos los días a las 9": {
+      "main": [
+        [
+          {
+            "node": "Buscar reclamos demorados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar reclamos demorados": {
+      "main": [
+        [
+          {
+            "node": "Mail con el resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Montevideo"
+  },
+  "pinData": {}
+}

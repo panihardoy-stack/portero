@@ -1,0 +1,146 @@
+{
+  "name": "Portero: visitas a Google Calendar",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "4caedade-0068-4e2c-9619-c0f88c7eb6f3",
+      "name": "Cada minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select v.id as visita_id,\n       to_char(v.fecha at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') as inicio,\n       to_char((v.fecha + interval '1 hour') at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') as fin,\n       r.descripcion, u.nombre as unidad, e.nombre as edificio,\n       coalesce(e.direccion, '') as direccion,\n       pr.nombre as proveedor, coalesce(pr.email, '') as proveedor_email\nfrom public.visitas v\njoin public.reclamos r on r.id = v.reclamo_id\njoin public.unidades u on u.id = r.unidad_id\njoin public.edificios e on e.id = u.edificio_id\njoin public.proveedores pr on pr.id = v.proveedor_id\nwhere v.calendar_event_id is null\n  and v.fecha > now() - interval '1 day'\norder by v.created_at\nlimit 10;",
+        "options": {}
+      },
+      "id": "14072664-146e-43c3-ae81-f3db57258d4e",
+      "name": "Buscar visitas sin evento",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "",
+          "name": "Supabase Portero"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "panihardoy@gmail.com",
+          "mode": "list",
+          "cachedResultName": "panihardoy@gmail.com"
+        },
+        "start": "={{ $json.inicio }}",
+        "end": "={{ $json.fin }}",
+        "useDefaultReminders": true,
+        "additionalFields": {
+          "summary": "=Visita de {{ $json.proveedor }}: unidad {{ $json.unidad }}",
+          "location": "={{ $json.edificio }}, {{ $json.direccion }}",
+          "description": "=Reclamo: {{ $json.descripcion }}\nUnidad {{ $json.unidad }}, {{ $json.edificio }}\n\nAgendado desde Portero: https://portero-indol.vercel.app/protected",
+          "attendees": [
+            "={{ $json.proveedor_email }}"
+          ],
+          "sendUpdates": "none"
+        }
+      },
+      "id": "62e566a0-92f5-4b96-9d09-f4c33e5f5f92",
+      "name": "Crear evento en Calendar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        480,
+        0
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "",
+          "name": "Google Calendar Portero"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update public.visitas set calendar_event_id = $1 where id = $2;",
+        "options": {
+          "queryReplacement": "={{ $json.id }},{{ $('Buscar visitas sin evento').item.json.visita_id }}"
+        }
+      },
+      "id": "0b571df3-0879-4090-aa59-860f37784b1f",
+      "name": "Guardar el evento en la visita",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        720,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "",
+          "name": "Supabase Portero"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Buscar visitas sin evento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar visitas sin evento": {
+      "main": [
+        [
+          {
+            "node": "Crear evento en Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear evento en Calendar": {
+      "main": [
+        [
+          {
+            "node": "Guardar el evento en la visita",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Montevideo"
+  },
+  "pinData": {}
+}

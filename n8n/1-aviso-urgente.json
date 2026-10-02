@@ -1,0 +1,136 @@
+{
+  "name": "Portero: aviso de reclamo urgente",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "eb16943c-da18-4095-8e48-3efeef127ca5",
+      "name": "Cada minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select r.id, r.descripcion, u.nombre as unidad, e.nombre as edificio,\n       coalesce(r.categoria, r.ia_categoria, 'sin clasificar') as categoria,\n       coalesce(r.ia_justificacion, '') as justificacion,\n       to_char(r.created_at at time zone 'America/Montevideo', 'DD/MM HH24:MI') as recibido\nfrom public.reclamos r\njoin public.unidades u on u.id = r.unidad_id\njoin public.edificios e on e.id = u.edificio_id\nwhere r.aviso_urgente_at is null\n  and r.estado <> 'resuelto'\n  and r.origen = 'app'\n  and coalesce(r.urgencia, r.ia_urgencia) = 'alta'\norder by r.created_at\nlimit 10;",
+        "options": {}
+      },
+      "id": "8b5fca78-e937-4eb4-99cb-7fb10a4ace6f",
+      "name": "Buscar reclamos urgentes",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "",
+          "name": "Supabase Portero"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "panihardoy@gmail.com",
+        "subject": "=Reclamo urgente: unidad {{ $json.unidad }}, {{ $json.edificio }}",
+        "emailType": "text",
+        "message": "=Llegó un reclamo de urgencia alta.\n\nUnidad: {{ $json.unidad }} ({{ $json.edificio }})\nProblema: {{ $json.descripcion }}\nCategoría: {{ $json.categoria }}\nRecibido: {{ $json.recibido }}\n{{ $json.justificacion ? 'Según la IA: ' + $json.justificacion : '' }}\n\nGestionalo en https://portero-indol.vercel.app/protected?urgencia=alta",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "0eae7b82-8d7a-4d58-b3b0-08c0f7df865c",
+      "name": "Mail al administrador",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        0
+      ],
+      "webhookId": "5b6c7eec-c885-4c8e-b952-a8cc8ce4f9d1",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail Portero"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update public.reclamos set aviso_urgente_at = now() where id = $1;",
+        "options": {
+          "queryReplacement": "={{ $('Buscar reclamos urgentes').item.json.id }}"
+        }
+      },
+      "id": "beeae5bd-0105-4b15-9c85-8fbeae866d5d",
+      "name": "Marcar como avisado",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        720,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "",
+          "name": "Supabase Portero"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Buscar reclamos urgentes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar reclamos urgentes": {
+      "main": [
+        [
+          {
+            "node": "Mail al administrador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mail al administrador": {
+      "main": [
+        [
+          {
+            "node": "Marcar como avisado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Montevideo"
+  },
+  "pinData": {}
+}
