@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { NuevoReclamoForm } from "@/components/nuevo-reclamo-form";
+import { GestionarReclamo } from "@/components/gestionar-reclamo";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -68,16 +69,22 @@ function Foto({ url }: { url?: string }) {
 async function PanelAdmin({ nombre }: { nombre: string }) {
   const supabase = await createClient();
 
-  // Por RLS, solo trae los edificios y reclamos que administra este usuario
+  // Por RLS, solo trae los edificios, reclamos y proveedores de este admin
   const { data: edificios } = await supabase
     .from("edificios")
     .select("id, nombre, direccion, codigo_invitacion");
 
+  const { data: proveedores } = await supabase
+    .from("proveedores")
+    .select("id, nombre, categoria")
+    .order("nombre");
+
   const { data: reclamos, count: totalReclamos } = await supabase
     .from("reclamos")
-    .select("id, descripcion, estado, created_at, foto_path, unidades(nombre)", {
-      count: "exact",
-    })
+    .select(
+      "id, descripcion, estado, created_at, foto_path, categoria, urgencia, proveedor_id, unidades(nombre)",
+      { count: "exact" }
+    )
     .order("created_at", { ascending: false })
     .limit(10);
 
@@ -106,6 +113,16 @@ async function PanelAdmin({ nombre }: { nombre: string }) {
                 {new Date(r.created_at).toLocaleDateString("es-UY")}
               </p>
               <Foto url={r.foto_path ? fotos.get(r.foto_path) : undefined} />
+              <GestionarReclamo
+                reclamo={{
+                  id: r.id,
+                  categoria: r.categoria,
+                  urgencia: r.urgencia,
+                  proveedor_id: r.proveedor_id,
+                  estado: r.estado,
+                }}
+                proveedores={proveedores ?? []}
+              />
             </div>
           ))
         ) : (
