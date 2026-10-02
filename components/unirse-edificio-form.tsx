@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { BOTON_PRIMARIO, CAMPO } from "@/components/portero-ui";
 
-export function UnirseEdificioForm() {
+export function UnirseEdificioForm({ pedirNombre = true }: { pedirNombre?: boolean }) {
   const router = useRouter();
   const [nombre, setNombre] = useState("");
   const [codigo, setCodigo] = useState("");
@@ -41,18 +41,20 @@ export function UnirseEdificioForm() {
       onSubmit={unirse}
       className="flex flex-col gap-4 rounded-lg border border-[#DDE1DB] bg-white p-5 sm:p-6"
     >
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="nombre" className="text-sm font-medium">
-          Tu nombre
-        </label>
-        <input
-          id="nombre"
-          autoComplete="name"
-          value={nombre}
-          onChange={(e) => setNombre(e.target.value)}
-          className={CAMPO}
-        />
-      </div>
+      {pedirNombre && (
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="nombre" className="text-sm font-medium">
+            Tu nombre
+          </label>
+          <input
+            id="nombre"
+            autoComplete="name"
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            className={CAMPO}
+          />
+        </div>
+      )}
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="codigo" className="text-sm font-medium">
@@ -65,7 +67,7 @@ export function UnirseEdificioForm() {
           value={codigo}
           onChange={(e) => setCodigo(e.target.value)}
           placeholder="Por ejemplo: 6f1d43"
-          className={`${CAMPO} tracking-[0.15em]`}
+          className={`${CAMPO} tracking-[0.15em] placeholder:tracking-normal`}
         />
         <p className="text-xs text-[#5B655F]">Son seis caracteres. Te lo da la administración.</p>
       </div>
@@ -81,7 +83,7 @@ export function UnirseEdificioForm() {
           value={unidad}
           onChange={(e) => setUnidad(e.target.value)}
           placeholder="Por ejemplo: 2A"
-          className={`${CAMPO} uppercase`}
+          className={`${CAMPO} uppercase placeholder:normal-case`}
         />
       </div>
 

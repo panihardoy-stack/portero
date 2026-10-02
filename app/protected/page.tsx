@@ -50,7 +50,13 @@ async function Panel({ searchParams }: { searchParams: Promise<Parametros> }) {
   if (perfil?.rol === "admin") {
     return <PanelAdmin parametros={parametros} />;
   }
-  return <PanelVecino nombre={perfil?.nombre ?? user.email ?? ""} parametros={parametros} />;
+  return (
+    <PanelVecino
+      nombre={perfil?.nombre ?? user.email ?? ""}
+      tieneNombre={!!perfil?.nombre}
+      parametros={parametros}
+    />
+  );
 }
 
 function texto(p: Parametros, clave: string) {
@@ -285,7 +291,15 @@ function textoEnviado(iso: string, ahora: number) {
   return /^\d/.test(t) ? `Enviado el ${t}` : `Enviado ${t.toLowerCase()}`;
 }
 
-async function PanelVecino({ nombre, parametros }: { nombre: string; parametros: Parametros }) {
+async function PanelVecino({
+  nombre,
+  tieneNombre,
+  parametros,
+}: {
+  nombre: string;
+  tieneNombre: boolean;
+  parametros: Parametros;
+}) {
   const supabase = await createClient();
 
   // Por RLS, el vecino solo ve su unidad y sus propios reclamos
@@ -303,7 +317,7 @@ async function PanelVecino({ nombre, parametros }: { nombre: string; parametros:
             Para hacer reclamos, primero unite a tu edificio con el código que te dio la administración.
           </p>
         </div>
-        <UnirseEdificioForm />
+        <UnirseEdificioForm pedirNombre={!tieneNombre} />
       </div>
     );
   }

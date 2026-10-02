@@ -1,78 +1,63 @@
 "use client";
 
-import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { BOTON_PRIMARIO, CAMPO } from "@/components/portero-ui";
+import { EncabezadoAuth, ErrorAuth, traducirError } from "@/components/auth-ui";
 
-export function UpdatePasswordForm({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+export function UpdatePasswordForm() {
+  const router = useRouter();
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
+  const [cargando, setCargando] = useState(false);
 
-  const handleForgotPassword = async (e: React.FormEvent) => {
+  async function guardar(e: FormEvent) {
     e.preventDefault();
-    const supabase = createClient();
-    setIsLoading(true);
+    setCargando(true);
     setError(null);
 
-    try {
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) throw error;
-      // Update this route to redirect to an authenticated route. The user already has an active session.
-      router.push("/protected");
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
-    } finally {
-      setIsLoading(false);
+    const { error } = await createClient().auth.updateUser({ password });
+
+    if (error) {
+      setError(traducirError(error));
+      setCargando(false);
+      return;
     }
-  };
+    router.push("/protected");
+    router.refresh();
+  }
 
   return (
-    <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">Reset Your Password</CardTitle>
-          <CardDescription>
-            Please enter your new password below.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleForgotPassword}>
-            <div className="flex flex-col gap-6">
-              <div className="grid gap-2">
-                <Label htmlFor="password">New password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="New password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Saving..." : "Save new password"}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+    <>
+      <EncabezadoAuth titulo="Elegí una contraseña nueva" texto="Vas a usarla para entrar a Portero." />
+      <form onSubmit={guardar} className="flex flex-col gap-5">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="password" className="text-sm font-medium">
+            Contraseña nueva
+          </label>
+          <input
+            id="password"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={6}
+            aria-describedby="ayuda-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={CAMPO}
+          />
+          <p id="ayuda-password" className="text-xs text-[#5B655F]">
+            Al menos 6 caracteres.
+          </p>
+        </div>
+
+        <ErrorAuth mensaje={error} />
+
+        <button type="submit" disabled={cargando} className={`${BOTON_PRIMARIO} w-full py-2.5`}>
+          {cargando ? "Guardando…" : "Guardar contraseña"}
+        </button>
+      </form>
+    </>
   );
 }
