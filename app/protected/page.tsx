@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { NuevoReclamoForm } from "@/components/nuevo-reclamo-form";
 import { GestionarReclamo } from "@/components/gestionar-reclamo";
+import { UnirseEdificioForm } from "@/components/unirse-edificio-form";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -178,9 +179,7 @@ async function PanelVecino({ nombre }: { nombre: string }) {
             {nombreDe(unidad.edificios)} · Unidad {unidad.nombre}
           </p>
         ) : (
-          <p className="text-sm text-muted-foreground">
-            Todavía no estás asociado a ninguna unidad.
-          </p>
+          <UnirseEdificioForm />
         )}
       </div>
 
