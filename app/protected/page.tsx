@@ -3,31 +3,37 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { NuevoReclamoForm } from "@/components/nuevo-reclamo-form";
-import { GestionarReclamo } from "@/components/gestionar-reclamo";
 import { UnirseEdificioForm } from "@/components/unirse-edificio-form";
+import { FiltrosReclamos } from "@/components/filtros-reclamos";
+import { FilaReclamo, VistaPorUnidad, type ReclamoAdmin } from "@/components/bandeja";
 import {
   BOTON_SECUNDARIO,
   CATEGORIA_LABEL,
-  EstadoChip,
+  ESTADO_INFO,
   FUENTE_DISPLAY,
   Placa,
   Seguimiento,
-  UrgenciaMarca,
+  normalizar,
   tiempoRelativo,
 } from "@/components/portero-ui";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
+type Parametros = Record<string, string | string[] | undefined>;
+
+const DIA = 1000 * 60 * 60 * 24;
+const unDecimal = new Intl.NumberFormat("es-UY", { maximumFractionDigits: 1 });
 
 // Página principal después del login: muestra un panel según el rol.
-export default function ProtectedPage() {
+export default function ProtectedPage({ searchParams }: { searchParams: Promise<Parametros> }) {
   return (
     <Suspense fallback={<p className="text-sm text-[#5B655F]">Cargando…</p>}>
-      <Panel />
+      <Panel searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function Panel() {
+async function Panel({ searchParams }: { searchParams: Promise<Parametros> }) {
+  const parametros = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -42,9 +48,14 @@ async function Panel() {
     .single();
 
   if (perfil?.rol === "admin") {
-    return <PanelAdmin />;
+    return <PanelAdmin parametros={parametros} />;
   }
-  return <PanelVecino nombre={perfil?.nombre ?? user.email ?? ""} />;
+  return <PanelVecino nombre={perfil?.nombre ?? user.email ?? ""} parametros={parametros} />;
+}
+
+function texto(p: Parametros, clave: string) {
+  const v = p[clave];
+  return (Array.isArray(v) ? v[0] : v) ?? "";
 }
 
 // Saca el nombre de una relación de Supabase (puede venir como objeto o lista)
@@ -69,44 +80,84 @@ async function urlsFirmadas(supabase: Supabase, paths: (string | null)[]) {
   return mapa;
 }
 
-// Orden de la bandeja: primero lo que nadie revisó, después por urgencia
+// Orden dentro de la bandeja: primero lo que nadie revisó, después por urgencia
 const PRIORIDAD_URGENCIA: Record<string, number> = { alta: 1, media: 3, baja: 4 };
 function prioridad(r: { estado: string; urgencia: string | null }) {
+  if (r.estado === "resuelto") return 9;
   if (r.estado === "nuevo") return 0;
   return PRIORIDAD_URGENCIA[r.urgencia ?? ""] ?? 2;
 }
 
+
 // ---------- ADMINISTRADOR ----------
-async function PanelAdmin() {
+const LIMITE = 500;
+
+async function PanelAdmin({ parametros }: { parametros: Parametros }) {
   const supabase = await createClient();
 
-  // Por RLS, todas estas consultas traen solo datos de los edificios de este admin
-  const [edificiosRes, proveedoresRes, abiertosRes, sinRevisarRes, urgentesRes] = await Promise.all([
-    supabase.from("edificios").select("id, nombre, direccion, codigo_invitacion").order("nombre"),
-    supabase.from("proveedores").select("id, nombre, categoria").order("nombre"),
-    supabase
-      .from("reclamos")
-      .select(
-        "id, descripcion, estado, created_at, foto_path, categoria, urgencia, proveedor_id, unidades(nombre)",
-        { count: "exact" }
-      )
-      .neq("estado", "resuelto")
-      .order("created_at", { ascending: false })
-      .limit(30),
-    supabase.from("reclamos").select("*", { count: "exact", head: true }).eq("estado", "nuevo"),
-    supabase
-      .from("reclamos")
-      .select("*", { count: "exact", head: true })
-      .neq("estado", "resuelto")
-      .eq("urgencia", "alta"),
-  ]);
+  const filtro = {
+    q: texto(parametros, "q"),
+    estado: texto(parametros, "estado"),
+    categoria: texto(parametros, "categoria"),
+    urgencia: texto(parametros, "urgencia"),
+    dias: Number(texto(parametros, "dias")) || 0,
+    vista: texto(parametros, "vista") === "lista" ? "lista" : "unidad",
+  };
+
+  // Filtros que resuelve la base de datos (por RLS, solo reclamos de sus edificios)
+  let consulta = supabase
+    .from("reclamos")
+    .select(
+      "id, descripcion, estado, created_at, foto_path, categoria, urgencia, proveedor_id, unidades(nombre)"
+    )
+    .order("created_at", { ascending: false })
+    .limit(LIMITE);
+
+  if (!filtro.estado) consulta = consulta.neq("estado", "resuelto");
+  else if (filtro.estado !== "todos") consulta = consulta.eq("estado", filtro.estado);
+  if (filtro.categoria === "sin") consulta = consulta.is("categoria", null);
+  else if (filtro.categoria) consulta = consulta.eq("categoria", filtro.categoria);
+  if (filtro.urgencia) consulta = consulta.eq("urgencia", filtro.urgencia);
 
   const ahora = Date.now();
+  if (filtro.dias) {
+    consulta = consulta.gte("created_at", new Date(ahora - filtro.dias * DIA).toISOString());
+  }
+
+  const [edificiosRes, proveedoresRes, reclamosRes, abiertosRes, sinRevisarRes, urgentesRes] =
+    await Promise.all([
+      supabase.from("edificios").select("id, nombre, direccion, codigo_invitacion").order("nombre"),
+      supabase.from("proveedores").select("id, nombre, categoria").order("nombre"),
+      consulta,
+      supabase.from("reclamos").select("*", { count: "exact", head: true }).neq("estado", "resuelto"),
+      supabase.from("reclamos").select("*", { count: "exact", head: true }).eq("estado", "nuevo"),
+      supabase
+        .from("reclamos")
+        .select("*", { count: "exact", head: true })
+        .neq("estado", "resuelto")
+        .eq("urgencia", "alta"),
+    ]);
+
   const edificios = edificiosRes.data ?? [];
   const proveedores = proveedoresRes.data ?? [];
-  const totalAbiertos = abiertosRes.count ?? 0;
-  const bandeja = [...(abiertosRes.data ?? [])].sort((a, b) => prioridad(a) - prioridad(b));
-  const fotos = await urlsFirmadas(supabase, bandeja.map((r) => r.foto_path));
+
+  // La búsqueda de texto se hace acá: unidad, descripción, categoría o estado
+  const busqueda = normalizar(filtro.q);
+  const reclamos: ReclamoAdmin[] = (reclamosRes.data ?? [])
+    .map((r) => ({ ...r, unidad: nombreDe(r.unidades) ?? "?" }))
+    .filter((r) => {
+      if (!busqueda) return true;
+      const campos = [
+        r.unidad,
+        r.descripcion,
+        r.categoria ? CATEGORIA_LABEL[r.categoria] ?? r.categoria : "sin clasificar",
+        ESTADO_INFO[r.estado]?.admin ?? r.estado,
+      ];
+      return campos.some((c) => normalizar(c).includes(busqueda));
+    })
+    .sort((a, b) => prioridad(a) - prioridad(b));
+
+  const fotos = await urlsFirmadas(supabase, reclamos.map((r) => r.foto_path));
 
   return (
     <div className="flex flex-col gap-10">
@@ -115,9 +166,7 @@ async function PanelAdmin() {
           <p className="text-sm text-[#5B655F]">
             {edificios.map((e) => e.nombre).join(", ") || "Todavía no tenés edificios"}
           </p>
-          <h1 className={`${FUENTE_DISPLAY} mt-1 text-3xl font-semibold tracking-tight`}>
-            Reclamos abiertos
-          </h1>
+          <h1 className={`${FUENTE_DISPLAY} mt-1 text-3xl font-semibold tracking-tight`}>Reclamos</h1>
         </div>
         <Link href="/protected/dashboard" className={BOTON_SECUNDARIO}>
           Ver indicadores
@@ -128,86 +177,51 @@ async function PanelAdmin() {
         aria-label="Resumen"
         className="-mt-4 flex flex-wrap gap-x-10 gap-y-2 border-y border-[#DDE1DB] py-4"
       >
-        <Cifra valor={totalAbiertos} texto="abiertos" />
-        <Cifra valor={sinRevisarRes.count ?? 0} texto="sin revisar" />
-        <Cifra valor={urgentesRes.count ?? 0} texto="de urgencia alta" alerta />
+        <Cifra valor={abiertosRes.count ?? 0} texto="abiertos" href="/protected" />
+        <Cifra valor={sinRevisarRes.count ?? 0} texto="sin revisar" href="/protected?estado=nuevo" />
+        <Cifra
+          valor={urgentesRes.count ?? 0}
+          texto="de urgencia alta"
+          href="/protected?urgencia=alta"
+          alerta
+        />
       </section>
 
-      <section aria-label="Bandeja de reclamos">
-        {bandeja.length === 0 ? (
+      <section aria-label="Bandeja de reclamos" className="flex flex-col gap-5">
+        <FiltrosReclamos />
+
+        <p className="text-sm text-[#5B655F]" aria-live="polite">
+          {reclamos.length === 1 ? "1 reclamo" : `${reclamos.length} reclamos`}
+          {filtro.vista === "unidad" && reclamos.length > 0
+            ? ` en ${new Set(reclamos.map((r) => r.unidad)).size} unidades`
+            : ""}
+          {(reclamosRes.data?.length ?? 0) === LIMITE ? `. Se muestran los ${LIMITE} más recientes.` : ""}
+        </p>
+
+        {reclamos.length === 0 ? (
           <div className="rounded-lg border border-dashed border-[#CFD5CD] bg-white px-6 py-12 text-center">
-            <p className={`${FUENTE_DISPLAY} text-lg font-semibold`}>No hay reclamos abiertos</p>
+            <p className={`${FUENTE_DISPLAY} text-lg font-semibold`}>
+              Ningún reclamo coincide con la búsqueda
+            </p>
             <p className="mt-1 text-sm text-[#5B655F]">
-              Cuando un vecino reporte un problema, va a aparecer acá.
+              Probá con otra unidad o palabra, o cambiá los filtros.
             </p>
           </div>
-        ) : (
+        ) : filtro.vista === "lista" ? (
           <ul className="divide-y divide-[#E6E9E4] overflow-hidden rounded-lg border border-[#DDE1DB] bg-white">
-            {bandeja.map((r) => {
-              const foto = r.foto_path ? fotos.get(r.foto_path) : undefined;
-              return (
-                <li key={r.id}>
-                  <details className="group">
-                    <summary className="flex cursor-pointer list-none items-center gap-4 px-4 py-3.5 transition-colors hover:bg-[#F8F9F7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1E4D3E] [&::-webkit-details-marker]:hidden">
-                      <Placa unidad={nombreDe(r.unidades)} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{r.descripcion}</p>
-                        <p className="mt-0.5 text-sm text-[#5B655F]">
-                          {tiempoRelativo(r.created_at, ahora)}
-                          {r.categoria ? `, ${CATEGORIA_LABEL[r.categoria] ?? r.categoria}` : ""}
-                          {foto ? ", con foto" : ""}
-                        </p>
-                      </div>
-                      <div className="hidden items-center gap-4 sm:flex">
-                        <UrgenciaMarca urgencia={r.urgencia} />
-                        <EstadoChip estado={r.estado} vista="admin" />
-                      </div>
-                      <svg
-                        aria-hidden
-                        viewBox="0 0 20 20"
-                        className="h-4 w-4 shrink-0 text-[#5B655F] transition-transform group-open:rotate-180"
-                      >
-                        <path d="M5 7.5 10 12.5 15 7.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
-                      </svg>
-                    </summary>
-
-                    <div className="border-t border-[#E6E9E4] bg-[#FAFBF9] px-4 pb-5 pt-4 sm:pl-[5.25rem]">
-                      <div className="mb-3 flex items-center gap-4 sm:hidden">
-                        <UrgenciaMarca urgencia={r.urgencia} />
-                        <EstadoChip estado={r.estado} vista="admin" />
-                      </div>
-                      {r.descripcion.length > 60 && (
-                        <p className="max-w-prose text-sm">{r.descripcion}</p>
-                      )}
-                      {foto && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={foto}
-                          alt={`Foto del reclamo: ${r.descripcion}`}
-                          className="mt-3 max-h-72 rounded-md border border-[#DDE1DB] object-cover"
-                        />
-                      )}
-                      <GestionarReclamo
-                        reclamo={{
-                          id: r.id,
-                          categoria: r.categoria,
-                          urgencia: r.urgencia,
-                          proveedor_id: r.proveedor_id,
-                          estado: r.estado,
-                        }}
-                        proveedores={proveedores}
-                      />
-                    </div>
-                  </details>
-                </li>
-              );
-            })}
+            {reclamos.map((r) => (
+              <FilaReclamo
+                key={r.id}
+                r={r}
+                ahora={ahora}
+                foto={r.foto_path ? fotos.get(r.foto_path) : undefined}
+                proveedores={proveedores}
+                mostrarUnidad
+              />
+            ))}
           </ul>
-        )}
-        {totalAbiertos > bandeja.length && (
-          <p className="mt-3 text-sm text-[#5B655F]">
-            Se muestran los {bandeja.length} más recientes de {totalAbiertos} reclamos abiertos.
-          </p>
+        ) : (
+          <VistaPorUnidad reclamos={reclamos} ahora={ahora} fotos={fotos} proveedores={proveedores} />
         )}
       </section>
 
@@ -237,9 +251,22 @@ async function PanelAdmin() {
   );
 }
 
-function Cifra({ valor, texto, alerta = false }: { valor: number; texto: string; alerta?: boolean }) {
+function Cifra({
+  valor,
+  texto,
+  href,
+  alerta = false,
+}: {
+  valor: number;
+  texto: string;
+  href: string;
+  alerta?: boolean;
+}) {
   return (
-    <p className="flex items-baseline gap-2">
+    <Link
+      href={href}
+      className="group flex items-baseline gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E4D3E] focus-visible:ring-offset-4"
+    >
       <span
         className={`${FUENTE_DISPLAY} text-2xl font-semibold tabular-nums ${
           alerta && valor > 0 ? "text-[#A3352B]" : ""
@@ -247,18 +274,18 @@ function Cifra({ valor, texto, alerta = false }: { valor: number; texto: string;
       >
         {valor}
       </span>
-      <span className="text-sm text-[#5B655F]">{texto}</span>
-    </p>
+      <span className="text-sm text-[#5B655F] underline-offset-4 group-hover:underline">{texto}</span>
+    </Link>
   );
 }
 
+// ---------- VECINO ----------
 function textoEnviado(iso: string, ahora: number) {
   const t = tiempoRelativo(iso, ahora);
   return /^\d/.test(t) ? `Enviado el ${t}` : `Enviado ${t.toLowerCase()}`;
 }
 
-// ---------- VECINO ----------
-async function PanelVecino({ nombre }: { nombre: string }) {
+async function PanelVecino({ nombre, parametros }: { nombre: string; parametros: Parametros }) {
   const supabase = await createClient();
 
   // Por RLS, el vecino solo ve su unidad y sus propios reclamos
@@ -283,11 +310,15 @@ async function PanelVecino({ nombre }: { nombre: string }) {
 
   const { data: reclamos } = await supabase
     .from("reclamos")
-    .select("id, descripcion, estado, created_at, foto_path")
+    .select("id, descripcion, estado, created_at, resuelto_at, foto_path, categoria, visitas(fecha)")
     .order("created_at", { ascending: false });
 
   const ahora = Date.now();
-  const lista = reclamos ?? [];
+  const todos = reclamos ?? [];
+  const verResueltos = texto(parametros, "ver") === "resueltos";
+  const enCurso = todos.filter((r) => r.estado !== "resuelto");
+  const resueltos = todos.filter((r) => r.estado === "resuelto");
+  const lista = verResueltos ? resueltos : enCurso;
   const fotos = await urlsFirmadas(supabase, lista.map((r) => r.foto_path));
 
   return (
@@ -304,18 +335,42 @@ async function PanelVecino({ nombre }: { nombre: string }) {
         <NuevoReclamoForm unidadId={unidad.id} />
 
         <section className="flex flex-col gap-4">
-          <h2 className={`${FUENTE_DISPLAY} text-xl font-semibold`}>Tus reclamos</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className={`${FUENTE_DISPLAY} text-xl font-semibold`}>Tus reclamos</h2>
+            <nav aria-label="Filtrar tus reclamos" className="inline-flex rounded-md border border-[#CFD5CD] bg-white p-0.5">
+              <Pestana href="/protected" activa={!verResueltos} texto={`En curso (${enCurso.length})`} />
+              <Pestana
+                href="/protected?ver=resueltos"
+                activa={verResueltos}
+                texto={`Resueltos (${resueltos.length})`}
+              />
+            </nav>
+          </div>
+
           {lista.length === 0 ? (
             <div className="rounded-lg border border-dashed border-[#CFD5CD] bg-white px-6 py-10 text-center">
-              <p className="font-medium">Todavía no hiciste reclamos</p>
+              <p className="font-medium">
+                {verResueltos ? "Todavía no tenés reclamos resueltos" : "No tenés reclamos en curso"}
+              </p>
               <p className="mt-1 text-sm text-[#5B655F]">
-                Cuando algo se rompa en tu unidad o en el edificio, contalo en el formulario.
+                {verResueltos
+                  ? "Cuando la administración resuelva un reclamo, va a aparecer acá."
+                  : "Cuando algo se rompa en tu unidad o en el edificio, contalo en el formulario."}
               </p>
             </div>
           ) : (
             <ul className="flex flex-col gap-3">
               {lista.map((r) => {
                 const foto = r.foto_path ? fotos.get(r.foto_path) : undefined;
+                const visitas = (r.visitas ?? []) as { fecha: string }[];
+                const proximaVisita = visitas
+                  .map((v) => v.fecha)
+                  .filter((f) => new Date(f).getTime() >= ahora - DIA)
+                  .sort()[0];
+                const diasResolucion =
+                  r.resuelto_at &&
+                  (new Date(r.resuelto_at).getTime() - new Date(r.created_at).getTime()) / DIA;
+
                 return (
                   <li key={r.id} className="rounded-lg border border-[#DDE1DB] bg-white p-4">
                     <div className="flex gap-4">
@@ -323,6 +378,7 @@ async function PanelVecino({ nombre }: { nombre: string }) {
                         <p className="font-medium">{r.descripcion}</p>
                         <p className="mt-0.5 text-sm text-[#5B655F]">
                           {textoEnviado(r.created_at, ahora)}
+                          {r.categoria ? `, ${CATEGORIA_LABEL[r.categoria] ?? r.categoria}` : ""}
                         </p>
                       </div>
                       {foto && (
@@ -337,6 +393,26 @@ async function PanelVecino({ nombre }: { nombre: string }) {
                     <div className="mt-4">
                       <Seguimiento estado={r.estado} />
                     </div>
+                    {proximaVisita && r.estado !== "resuelto" && (
+                      <p className="mt-3 rounded-md bg-[#ECE8F6] px-3 py-2 text-sm text-[#4E3F8A]">
+                        Visita del proveedor:{" "}
+                        {new Date(proximaVisita).toLocaleString("es-UY", {
+                          weekday: "long",
+                          day: "numeric",
+                          month: "long",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    )}
+                    {typeof diasResolucion === "number" && (
+                      <p className="mt-3 text-sm text-[#265A42]">
+                        Resuelto en{" "}
+                        {diasResolucion < 1
+                          ? "menos de un día"
+                          : `${unDecimal.format(diasResolucion)} ${diasResolucion < 1.5 ? "día" : "días"}`}
+                      </p>
+                    )}
                   </li>
                 );
               })}
@@ -345,5 +421,19 @@ async function PanelVecino({ nombre }: { nombre: string }) {
         </section>
       </div>
     </div>
+  );
+}
+
+function Pestana({ href, activa, texto }: { href: string; activa: boolean; texto: string }) {
+  return (
+    <Link
+      href={href}
+      aria-current={activa ? "page" : undefined}
+      className={`rounded-[5px] px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E4D3E] ${
+        activa ? "bg-[#1E4D3E] text-white" : "text-[#5B655F] hover:text-[#18211D]"
+      }`}
+    >
+      {texto}
+    </Link>
   );
 }
