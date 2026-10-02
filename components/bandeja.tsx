@@ -25,6 +25,7 @@ export type ReclamoAdmin = {
   ia_urgencia: string | null;
   ia_proveedor_id: number | null;
   ia_justificacion: string | null;
+  visita: string | null;
   unidad: string;
 };
 
@@ -155,6 +156,9 @@ export function FilaReclamo({
                   ? `, ${CATEGORIA_LABEL[r.ia_categoria] ?? r.ia_categoria} según la IA`
                   : ""}
               {foto ? ", con foto" : ""}
+              {r.estado === "agendado" && r.visita
+                ? `, visita el ${new Date(r.visita).toLocaleString("es-UY", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}`
+                : ""}
             </p>
           </div>
           <div className="hidden items-center gap-4 sm:flex">
@@ -197,6 +201,7 @@ export function FilaReclamo({
               estado: r.estado,
             }}
             proveedores={proveedores}
+            visita={r.visita}
             ia={{
               categoria: r.ia_categoria,
               urgencia: r.ia_urgencia,

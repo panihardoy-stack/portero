@@ -114,7 +114,7 @@ async function PanelAdmin({ parametros }: { parametros: Parametros }) {
   let consulta = supabase
     .from("reclamos")
     .select(
-      "id, descripcion, estado, created_at, foto_path, categoria, urgencia, proveedor_id, ia_categoria, ia_urgencia, ia_proveedor_id, ia_justificacion, unidades(nombre)"
+      "id, descripcion, estado, created_at, foto_path, categoria, urgencia, proveedor_id, ia_categoria, ia_urgencia, ia_proveedor_id, ia_justificacion, unidades(nombre), visitas(fecha)"
     )
     .order("created_at", { ascending: false })
     .limit(LIMITE);
@@ -150,7 +150,12 @@ async function PanelAdmin({ parametros }: { parametros: Parametros }) {
   // La búsqueda de texto se hace acá: unidad, descripción, categoría o estado
   const busqueda = normalizar(filtro.q);
   const reclamos: ReclamoAdmin[] = (reclamosRes.data ?? [])
-    .map((r) => ({ ...r, unidad: nombreDe(r.unidades) ?? "?" }))
+    .map((r) => {
+      // La visita más reciente del reclamo, si tiene
+      const visitas = (r.visitas ?? []) as { fecha: string }[];
+      const visita = visitas.map((v) => v.fecha).sort().at(-1) ?? null;
+      return { ...r, unidad: nombreDe(r.unidades) ?? "?", visita };
+    })
     .filter((r) => {
       if (!busqueda) return true;
       const campos = [

@@ -32,14 +32,24 @@ export type SugerenciaIA = {
 const SELECT =
   "h-10 w-full rounded-md border border-[#CFD5CD] bg-white px-3 text-sm text-[#18211D] focus:border-[#1E4D3E] focus:outline-none focus:ring-2 focus:ring-[#1E4D3E]/20";
 
+// Convierte una fecha guardada al formato del campo "fecha y hora" (hora local)
+function aCampoFecha(iso: string | null | undefined) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const dos = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}T${dos(d.getHours())}:${dos(d.getMinutes())}`;
+}
+
 export function GestionarReclamo({
   reclamo,
   proveedores,
   ia,
+  visita,
 }: {
   reclamo: Reclamo;
   proveedores: Proveedor[];
   ia?: SugerenciaIA;
+  visita?: string | null;
 }) {
   const router = useRouter();
   const [categoria, setCategoria] = useState(reclamo.categoria ?? "");
@@ -49,6 +59,7 @@ export function GestionarReclamo({
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
   const [analizando, setAnalizando] = useState(false);
+  const [fechaVisita, setFechaVisita] = useState(aCampoFecha(visita));
 
   // Si hay categoría elegida, solo se muestran los proveedores de esa categoría
   const opcionesProveedor = categoria
@@ -61,6 +72,11 @@ export function GestionarReclamo({
     // Regla de negocio: no se asigna ni agenda sin proveedor
     if ((estado === "asignado" || estado === "agendado") && !proveedorId) {
       setMensaje({ tipo: "error", texto: "Elegí un proveedor para asignar o agendar el reclamo." });
+      return;
+    }
+    // Para agendar hace falta la fecha y hora de la visita
+    if (estado === "agendado" && !fechaVisita) {
+      setMensaje({ tipo: "error", texto: "Elegí la fecha y hora de la visita para agendar el reclamo." });
       return;
     }
 
@@ -83,14 +99,30 @@ export function GestionarReclamo({
     // RLS verifica que el admin solo pueda modificar reclamos de sus edificios
     const { error } = await supabase.from("reclamos").update(cambios).eq("id", reclamo.id);
 
-    setGuardando(false);
-
     if (error) {
+      setGuardando(false);
       setMensaje({ tipo: "error", texto: "No se pudieron guardar los cambios: " + error.message });
       return;
     }
 
-    setMensaje({ tipo: "ok", texto: "Cambios guardados." });
+    // Si se agendó una fecha nueva, se registra la visita. n8n la toma y crea el evento en Google Calendar.
+    let textoOk = "Cambios guardados.";
+    if (estado === "agendado" && fechaVisita !== aCampoFecha(visita)) {
+      const { error: errorVisita } = await supabase.from("visitas").insert({
+        reclamo_id: reclamo.id,
+        proveedor_id: Number(proveedorId),
+        fecha: new Date(fechaVisita).toISOString(),
+      });
+      if (errorVisita) {
+        setGuardando(false);
+        setMensaje({ tipo: "error", texto: "Se guardó el estado, pero no la visita: " + errorVisita.message });
+        return;
+      }
+      textoOk = "Cambios guardados. La visita se va a agregar a Google Calendar en un minuto.";
+    }
+
+    setGuardando(false);
+    setMensaje({ tipo: "ok", texto: textoOk });
     router.refresh();
   }
 
@@ -249,6 +281,26 @@ export function GestionarReclamo({
           </select>
         </Campo>
       </div>
+
+      {estado === "agendado" && (
+        <div className="flex flex-col gap-1.5 sm:max-w-xs">
+          <label htmlFor={id("visita")} className="text-xs font-medium text-[#5B655F]">
+            Fecha y hora de la visita
+          </label>
+          <input
+            id={id("visita")}
+            type="datetime-local"
+            value={fechaVisita}
+            onChange={(e) => setFechaVisita(e.target.value)}
+            className={SELECT}
+          />
+          {visita && fechaVisita !== aCampoFecha(visita) && (
+            <p className="text-xs text-[#7A4F12]">
+              Al guardar se agenda una visita nueva. La anterior queda en Calendar hasta que la borres.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" onClick={guardar} disabled={guardando} className={BOTON_PRIMARIO}>
