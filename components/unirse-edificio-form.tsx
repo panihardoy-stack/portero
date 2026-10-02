@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { BOTON_PRIMARIO, CAMPO } from "@/components/portero-ui";
 
 export function UnirseEdificioForm() {
   const router = useRouter();
@@ -35,44 +36,63 @@ export function UnirseEdificioForm() {
     router.refresh();
   }
 
-  const claseInput = "rounded-md border p-2 text-sm bg-transparent";
-
   return (
-    <form onSubmit={unirse} className="mt-4 flex flex-col gap-3 rounded-md border p-4">
-      <p className="text-sm font-medium">Unite a tu edificio</p>
-      <p className="text-sm text-muted-foreground">
-        Pedile el código de invitación a la administración.
-      </p>
+    <form
+      onSubmit={unirse}
+      className="flex flex-col gap-4 rounded-lg border border-[#DDE1DB] bg-white p-5 sm:p-6"
+    >
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="nombre" className="text-sm font-medium">
+          Tu nombre
+        </label>
+        <input
+          id="nombre"
+          autoComplete="name"
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          className={CAMPO}
+        />
+      </div>
 
-      <input
-        placeholder="Tu nombre"
-        value={nombre}
-        onChange={(e) => setNombre(e.target.value)}
-        className={claseInput}
-      />
-      <input
-        required
-        placeholder="Código de invitación (ej: 6f1d43)"
-        value={codigo}
-        onChange={(e) => setCodigo(e.target.value)}
-        className={claseInput}
-      />
-      <input
-        required
-        placeholder="Tu unidad (ej: 2A)"
-        value={unidad}
-        onChange={(e) => setUnidad(e.target.value)}
-        className={claseInput}
-      />
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="codigo" className="text-sm font-medium">
+          Código del edificio
+        </label>
+        <input
+          id="codigo"
+          required
+          autoComplete="off"
+          value={codigo}
+          onChange={(e) => setCodigo(e.target.value)}
+          placeholder="Por ejemplo: 6f1d43"
+          className={`${CAMPO} tracking-[0.15em]`}
+        />
+        <p className="text-xs text-[#5B655F]">Son seis caracteres. Te lo da la administración.</p>
+      </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="unidad" className="text-sm font-medium">
+          Tu unidad
+        </label>
+        <input
+          id="unidad"
+          required
+          autoComplete="off"
+          value={unidad}
+          onChange={(e) => setUnidad(e.target.value)}
+          placeholder="Por ejemplo: 2A"
+          className={`${CAMPO} uppercase`}
+        />
+      </div>
 
-      <button
-        type="submit"
-        disabled={enviando}
-        className="self-start rounded-md bg-foreground text-background px-4 py-2 text-sm font-medium disabled:opacity-50"
-      >
-        {enviando ? "Uniéndote..." : "Unirme"}
+      {error && (
+        <p role="alert" className="rounded-md bg-[#F7E3E0] px-3 py-2 text-sm text-[#8E2C23]">
+          {error}
+        </p>
+      )}
+
+      <button type="submit" disabled={enviando} className={`${BOTON_PRIMARIO} self-start`}>
+        {enviando ? "Uniéndote…" : "Unirme al edificio"}
       </button>
     </form>
   );

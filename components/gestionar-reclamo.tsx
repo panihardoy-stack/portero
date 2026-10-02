@@ -3,10 +3,15 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-
-const CATEGORIAS = ["sanitaria", "electrica", "ascensor", "humedad", "cerrajeria", "otros"];
-const URGENCIAS = ["baja", "media", "alta"];
-const ESTADOS = ["nuevo", "asignado", "agendado", "resuelto"];
+import {
+  BOTON_PRIMARIO,
+  CATEGORIAS,
+  CATEGORIA_LABEL,
+  ESTADOS,
+  ESTADO_INFO,
+  URGENCIAS,
+  URGENCIA_INFO,
+} from "@/components/portero-ui";
 
 type Proveedor = { id: number; nombre: string; categoria: string };
 type Reclamo = {
@@ -16,6 +21,9 @@ type Reclamo = {
   proveedor_id: number | null;
   estado: string;
 };
+
+const SELECT =
+  "h-10 w-full rounded-md border border-[#CFD5CD] bg-white px-3 text-sm text-[#18211D] focus:border-[#1E4D3E] focus:outline-none focus:ring-2 focus:ring-[#1E4D3E]/20";
 
 export function GestionarReclamo({
   reclamo,
@@ -42,7 +50,7 @@ export function GestionarReclamo({
 
     // Regla de negocio: no se asigna ni agenda sin proveedor
     if ((estado === "asignado" || estado === "agendado") && !proveedorId) {
-      setMensaje({ tipo: "error", texto: "Elegí un proveedor antes de asignar o agendar." });
+      setMensaje({ tipo: "error", texto: "Elegí un proveedor para asignar o agendar el reclamo." });
       return;
     }
 
@@ -68,7 +76,7 @@ export function GestionarReclamo({
     setGuardando(false);
 
     if (error) {
-      setMensaje({ tipo: "error", texto: "No se pudo guardar: " + error.message });
+      setMensaje({ tipo: "error", texto: "No se pudieron guardar los cambios: " + error.message });
       return;
     }
 
@@ -76,73 +84,117 @@ export function GestionarReclamo({
     router.refresh();
   }
 
-  const claseSelect = "rounded-md border p-2 text-sm bg-transparent";
+  const id = (campo: string) => `${campo}-${reclamo.id}`;
 
   return (
-    <div className="mt-3 flex flex-col gap-3 border-t pt-3">
-      <div className="grid grid-cols-2 gap-2">
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-          Categoría
+    <div className="mt-5 flex flex-col gap-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Campo etiqueta="Categoría" htmlFor={id("categoria")}>
           <select
+            id={id("categoria")}
             value={categoria}
             onChange={(e) => {
               setCategoria(e.target.value);
               setProveedorId(""); // al cambiar categoría, se vuelve a elegir proveedor
             }}
-            className={claseSelect}
+            className={SELECT}
+          >
+            <option value="">Sin clasificar</option>
+            {CATEGORIAS.map((c) => (
+              <option key={c} value={c}>
+                {CATEGORIA_LABEL[c]}
+              </option>
+            ))}
+          </select>
+        </Campo>
+
+        <Campo etiqueta="Urgencia" htmlFor={id("urgencia")}>
+          <select
+            id={id("urgencia")}
+            value={urgencia}
+            onChange={(e) => setUrgencia(e.target.value)}
+            className={SELECT}
           >
             <option value="">Sin definir</option>
-            {CATEGORIAS.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-          Urgencia
-          <select value={urgencia} onChange={(e) => setUrgencia(e.target.value)} className={claseSelect}>
-            <option value="">Sin definir</option>
             {URGENCIAS.map((u) => (
-              <option key={u} value={u}>{u}</option>
+              <option key={u} value={u}>
+                {URGENCIA_INFO[u].label}
+              </option>
             ))}
           </select>
-        </label>
+        </Campo>
 
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-          Proveedor
-          <select value={proveedorId} onChange={(e) => setProveedorId(e.target.value)} className={claseSelect}>
+        <Campo
+          etiqueta="Proveedor"
+          htmlFor={id("proveedor")}
+          ayuda={categoria && opcionesProveedor.length === 0 ? "No hay proveedores de esta categoría." : undefined}
+        >
+          <select
+            id={id("proveedor")}
+            value={proveedorId}
+            onChange={(e) => setProveedorId(e.target.value)}
+            className={SELECT}
+          >
             <option value="">Sin asignar</option>
             {opcionesProveedor.map((p) => (
-              <option key={p.id} value={p.id}>{p.nombre}</option>
+              <option key={p.id} value={p.id}>
+                {p.nombre}
+              </option>
             ))}
           </select>
-        </label>
+        </Campo>
 
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-          Estado
-          <select value={estado} onChange={(e) => setEstado(e.target.value)} className={claseSelect}>
+        <Campo etiqueta="Estado" htmlFor={id("estado")}>
+          <select
+            id={id("estado")}
+            value={estado}
+            onChange={(e) => setEstado(e.target.value)}
+            className={SELECT}
+          >
             {ESTADOS.map((s) => (
-              <option key={s} value={s}>{s}</option>
+              <option key={s} value={s}>
+                {ESTADO_INFO[s].admin}
+              </option>
             ))}
           </select>
-        </label>
+        </Campo>
       </div>
 
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={guardar}
-          disabled={guardando}
-          className="rounded-md bg-foreground text-background px-4 py-2 text-sm font-medium disabled:opacity-50"
-        >
-          {guardando ? "Guardando..." : "Guardar"}
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" onClick={guardar} disabled={guardando} className={BOTON_PRIMARIO}>
+          {guardando ? "Guardando…" : "Guardar cambios"}
         </button>
         {mensaje && (
-          <p className={`text-sm ${mensaje.tipo === "ok" ? "text-green-600" : "text-red-500"}`}>
+          <p
+            role={mensaje.tipo === "error" ? "alert" : "status"}
+            className={`text-sm ${mensaje.tipo === "ok" ? "text-[#265A42]" : "text-[#A3352B]"}`}
+          >
             {mensaje.texto}
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+function Campo({
+  etiqueta,
+  htmlFor,
+  ayuda,
+  children,
+}: {
+  etiqueta: string;
+  htmlFor: string;
+  ayuda?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={htmlFor} className="text-xs font-medium text-[#5B655F]">
+        {etiqueta}
+      </label>
+      {children}
+      {ayuda && <p className="text-xs text-[#7A4F12]">{ayuda}</p>}
     </div>
   );
 }
