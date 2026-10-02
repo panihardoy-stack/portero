@@ -114,7 +114,7 @@ async function PanelAdmin({ parametros }: { parametros: Parametros }) {
   let consulta = supabase
     .from("reclamos")
     .select(
-      "id, descripcion, estado, created_at, foto_path, categoria, urgencia, proveedor_id, unidades(nombre)"
+      "id, descripcion, estado, created_at, foto_path, categoria, urgencia, proveedor_id, ia_categoria, ia_urgencia, ia_proveedor_id, ia_justificacion, unidades(nombre)"
     )
     .order("created_at", { ascending: false })
     .limit(LIMITE);
@@ -157,6 +157,7 @@ async function PanelAdmin({ parametros }: { parametros: Parametros }) {
         r.unidad,
         r.descripcion,
         r.categoria ? CATEGORIA_LABEL[r.categoria] ?? r.categoria : "sin clasificar",
+        r.ia_categoria ? CATEGORIA_LABEL[r.ia_categoria] ?? r.ia_categoria : "",
         ESTADO_INFO[r.estado]?.admin ?? r.estado,
       ];
       return campos.some((c) => normalizar(c).includes(busqueda));

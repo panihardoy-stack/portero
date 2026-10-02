@@ -21,6 +21,10 @@ export type ReclamoAdmin = {
   categoria: string | null;
   urgencia: string | null;
   proveedor_id: number | null;
+  ia_categoria: string | null;
+  ia_urgencia: string | null;
+  ia_proveedor_id: number | null;
+  ia_justificacion: string | null;
   unidad: string;
 };
 
@@ -145,7 +149,11 @@ export function FilaReclamo({
             <p className="truncate font-medium">{r.descripcion}</p>
             <p className="mt-0.5 text-sm text-[#5B655F]">
               {tiempoRelativo(r.created_at, ahora)}
-              {r.categoria ? `, ${CATEGORIA_LABEL[r.categoria] ?? r.categoria}` : ""}
+              {r.categoria
+                ? `, ${CATEGORIA_LABEL[r.categoria] ?? r.categoria}`
+                : r.ia_categoria
+                  ? `, ${CATEGORIA_LABEL[r.ia_categoria] ?? r.ia_categoria} según la IA`
+                  : ""}
               {foto ? ", con foto" : ""}
             </p>
           </div>
@@ -189,6 +197,12 @@ export function FilaReclamo({
               estado: r.estado,
             }}
             proveedores={proveedores}
+            ia={{
+              categoria: r.ia_categoria,
+              urgencia: r.ia_urgencia,
+              proveedor_id: r.ia_proveedor_id,
+              justificacion: r.ia_justificacion,
+            }}
           />
         </div>
       </details>

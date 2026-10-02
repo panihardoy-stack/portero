@@ -20,6 +20,9 @@ export type ReclamoIndicador = {
   created_at: string;
   resuelto_at: string | null;
   proveedor_id: number | null;
+  ia_categoria: string | null;
+  ia_urgencia: string | null;
+  ia_proveedor_id: number | null;
   unidad: string;
 };
 type Reclamo = ReclamoIndicador;
@@ -118,6 +121,21 @@ export function Indicadores({
     })
     .filter((p) => p.asignados > 0)
     .sort((a, b) => b.asignados - a.asignados);
+
+  // Acierto de la IA: solo cuenta los reclamos donde el admin ya decidió
+  const compararIA = (ia: keyof Reclamo, final: keyof Reclamo) => {
+    const evaluados = reclamos.filter((r) => r[ia] != null && r[final] != null);
+    return {
+      evaluados: evaluados.length,
+      aciertos: evaluados.filter((r) => r[ia] === r[final]).length,
+    };
+  };
+  const acierto = [
+    { etiqueta: "Categoría", ...compararIA("ia_categoria", "categoria") },
+    { etiqueta: "Urgencia", ...compararIA("ia_urgencia", "urgencia") },
+    { etiqueta: "Proveedor", ...compararIA("ia_proveedor_id", "proveedor_id") },
+  ];
+  const evaluadosIA = acierto[0].evaluados;
 
   const maxMes = Math.max(...porMes.map((m) => m.valor), 1);
   const maxCategoria = Math.max(...porCategoria.map((c) => c.valor), 1);
@@ -346,6 +364,39 @@ export function Indicadores({
                 </tbody>
               </table>
             </div>
+          )}
+        </Tarjeta>
+        <Tarjeta
+          titulo="Acierto de la IA"
+          nota={
+            evaluadosIA > 0
+              ? `En cuántos reclamos la administración coincidió con la sugerencia de la IA. Sobre ${evaluadosIA} ${evaluadosIA === 1 ? "reclamo" : "reclamos"} con sugerencia y decisión.`
+              : "Va a aparecer cuando haya reclamos con sugerencia de la IA que la administración ya clasificó."
+          }
+          className="lg:col-span-5"
+        >
+          {evaluadosIA > 0 && (
+            <ul className="mt-5 grid gap-5 sm:grid-cols-3">
+              {acierto.map((a) => {
+                const tasa = a.evaluados ? a.aciertos / a.evaluados : 0;
+                return (
+                  <li key={a.etiqueta} className="flex flex-col gap-2">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-sm text-[#5B655F]">{a.etiqueta}</span>
+                      <span className={`${FUENTE_DISPLAY} text-2xl font-semibold tabular-nums`}>
+                        {a.evaluados ? porcentaje.format(tasa) : "Sin datos"}
+                      </span>
+                    </div>
+                    <span className="h-2.5 overflow-hidden rounded-full bg-[#EEF0EC]">
+                      <span className="block h-full rounded-full bg-[#1E4D3E]" style={{ width: `${tasa * 100}%` }} />
+                    </span>
+                    <span className="text-xs text-[#5B655F]">
+                      {a.aciertos} de {a.evaluados}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </Tarjeta>
       </div>

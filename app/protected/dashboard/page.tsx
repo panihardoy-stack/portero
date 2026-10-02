@@ -42,7 +42,7 @@ async function Dashboard({ searchParams }: { searchParams: Promise<Parametros> }
     supabase.from("edificios").select("nombre").order("nombre"),
     supabase
       .from("reclamos")
-      .select("categoria, urgencia, estado, created_at, resuelto_at, proveedor_id, unidades(nombre)")
+      .select("categoria, urgencia, estado, created_at, resuelto_at, proveedor_id, ia_categoria, ia_urgencia, ia_proveedor_id, unidades(nombre)")
       .gte("created_at", desde.toISOString())
       .limit(5000),
     supabase.from("proveedores").select("id, nombre"),

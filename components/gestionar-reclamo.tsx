@@ -22,15 +22,24 @@ type Reclamo = {
   estado: string;
 };
 
+export type SugerenciaIA = {
+  categoria: string | null;
+  urgencia: string | null;
+  proveedor_id: number | null;
+  justificacion: string | null;
+};
+
 const SELECT =
   "h-10 w-full rounded-md border border-[#CFD5CD] bg-white px-3 text-sm text-[#18211D] focus:border-[#1E4D3E] focus:outline-none focus:ring-2 focus:ring-[#1E4D3E]/20";
 
 export function GestionarReclamo({
   reclamo,
   proveedores,
+  ia,
 }: {
   reclamo: Reclamo;
   proveedores: Proveedor[];
+  ia?: SugerenciaIA;
 }) {
   const router = useRouter();
   const [categoria, setCategoria] = useState(reclamo.categoria ?? "");
@@ -39,6 +48,7 @@ export function GestionarReclamo({
   const [estado, setEstado] = useState(reclamo.estado);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+  const [analizando, setAnalizando] = useState(false);
 
   // Si hay categoría elegida, solo se muestran los proveedores de esa categoría
   const opcionesProveedor = categoria
@@ -86,8 +96,88 @@ export function GestionarReclamo({
 
   const id = (campo: string) => `${campo}-${reclamo.id}`;
 
+  const hayIA = !!ia?.categoria;
+  const proveedorIA = proveedores.find((p) => p.id === ia?.proveedor_id);
+  const yaCoincide =
+    hayIA &&
+    categoria === (ia?.categoria ?? "") &&
+    urgencia === (ia?.urgencia ?? "") &&
+    proveedorId === (ia?.proveedor_id?.toString() ?? "");
+
+  function usarSugerencia() {
+    if (!ia) return;
+    setCategoria(ia.categoria ?? "");
+    setUrgencia(ia.urgencia ?? "");
+    setProveedorId(ia.proveedor_id?.toString() ?? "");
+    if (estado === "nuevo" && ia.proveedor_id) setEstado("asignado");
+    setMensaje(null);
+  }
+
+  async function pedirSugerencia() {
+    setAnalizando(true);
+    setMensaje(null);
+    const respuesta = await fetch("/api/clasificar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reclamoId: reclamo.id, forzar: true }),
+    }).catch(() => null);
+    setAnalizando(false);
+    if (!respuesta?.ok) {
+      setMensaje({ tipo: "error", texto: "La IA no respondió. Probá de nuevo o clasificalo a mano." });
+      return;
+    }
+    router.refresh();
+  }
+
   return (
     <div className="mt-5 flex flex-col gap-4">
+      {hayIA ? (
+        <div className="flex flex-col gap-2 rounded-md border border-[#CFE0D7] bg-[#EEF4F0] p-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-[#1E4D3E]">Sugerencia de la IA</p>
+            <p className="mt-0.5 text-sm font-medium">
+              {CATEGORIA_LABEL[ia!.categoria!] ?? ia!.categoria}
+              {ia!.urgencia ? `, urgencia ${URGENCIA_INFO[ia!.urgencia]?.label.toLowerCase()}` : ""}
+              {proveedorIA ? `, ${proveedorIA.nombre}` : ""}
+            </p>
+            {ia!.justificacion && <p className="mt-1 text-sm text-[#5B655F]">{ia!.justificacion}</p>}
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
+            {yaCoincide ? (
+              <span className="text-xs text-[#265A42]">Coincide con lo elegido</span>
+            ) : (
+              <button
+                type="button"
+                onClick={usarSugerencia}
+                className="rounded-md border border-[#1E4D3E] bg-white px-3 py-1.5 text-sm font-medium text-[#1E4D3E] hover:bg-[#F3F7F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E4D3E]"
+              >
+                Usar sugerencia
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={pedirSugerencia}
+              disabled={analizando}
+              className="text-xs text-[#5B655F] underline-offset-4 hover:underline disabled:opacity-60"
+            >
+              {analizando ? "Analizando…" : "Volver a pedir"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-[#CFD5CD] px-3 py-2.5">
+          <p className="text-sm text-[#5B655F]">Este reclamo no tiene sugerencia de la IA.</p>
+          <button
+            type="button"
+            onClick={pedirSugerencia}
+            disabled={analizando}
+            className="rounded-md border border-[#1E4D3E] bg-white px-3 py-1.5 text-sm font-medium text-[#1E4D3E] hover:bg-[#F3F7F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E4D3E] disabled:opacity-60"
+          >
+            {analizando ? "Analizando la foto y el texto…" : "Pedir sugerencia a la IA"}
+          </button>
+        </div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2">
         <Campo etiqueta="Categoría" htmlFor={id("categoria")}>
           <select

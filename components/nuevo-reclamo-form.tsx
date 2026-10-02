@@ -80,20 +80,34 @@ export function NuevoReclamoForm({ unidadId }: { unidadId: number }) {
     }
 
     // 2. Guardar el reclamo (RLS verifica que sea en la unidad del vecino)
-    const { error: errorReclamo } = await supabase.from("reclamos").insert({
-      descripcion: descripcion.trim(),
-      unidad_id: unidadId,
-      vecino_id: user.id,
-      foto_path: fotoPath,
-    });
+    const { data: nuevo, error: errorReclamo } = await supabase
+      .from("reclamos")
+      .insert({
+        descripcion: descripcion.trim(),
+        unidad_id: unidadId,
+        vecino_id: user.id,
+        foto_path: fotoPath,
+      })
+      .select("id")
+      .single();
 
-    if (errorReclamo) {
-      setError("No se pudo guardar el reclamo: " + errorReclamo.message);
+    if (errorReclamo || !nuevo) {
+      setError("No se pudo guardar el reclamo: " + (errorReclamo?.message ?? "sin respuesta"));
       setEnviando(false);
       return;
     }
 
-    // 3. Limpiar el formulario y recargar los datos de la página
+    // 3. Pedir la sugerencia de la IA en segundo plano (el vecino no espera la respuesta)
+    fetch("/api/clasificar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reclamoId: nuevo.id }),
+      keepalive: true,
+    }).catch(() => {
+      // Si falla, el admin lo clasifica a mano o vuelve a pedir la sugerencia
+    });
+
+    // 4. Limpiar el formulario y recargar los datos de la página
     setDescripcion("");
     quitarFoto();
     setEnviando(false);
