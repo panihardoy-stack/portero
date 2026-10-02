@@ -1,7 +1,9 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { NuevoReclamoForm } from "@/components/nuevo-reclamo-form";
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 // Página principal después del login: muestra un panel según el rol.
 export default function ProtectedPage() {
@@ -34,45 +36,32 @@ async function Panel() {
   return <PanelVecino nombre={perfil?.nombre ?? user.email ?? ""} />;
 }
 
-// ---------- ACCIÓN: el vecino crea un reclamo ----------
-async function crearReclamo(formData: FormData) {
-  "use server";
-
-  const descripcion = String(formData.get("descripcion") ?? "").trim();
-  if (!descripcion) return;
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/auth/login");
-
-  const { data: perfil } = await supabase
-    .from("profiles")
-    .select("unidad_id")
-    .eq("id", user.id)
-    .single();
-  if (!perfil?.unidad_id) return;
-
-  // RLS verifica que el vecino solo pueda crear reclamos en su propia unidad
-  const { error } = await supabase.from("reclamos").insert({
-    descripcion,
-    unidad_id: perfil.unidad_id,
-    vecino_id: user.id,
-  });
-
-  if (error) {
-    console.error("Error al crear reclamo:", error.message);
-    return;
-  }
-
-  revalidatePath("/protected");
-}
-
 // Saca el nombre de una relación de Supabase (puede venir como objeto o lista)
 function nombreDe(rel: unknown): string | undefined {
   const r = rel as { nombre: string } | { nombre: string }[] | null | undefined;
   return Array.isArray(r) ? r[0]?.nombre : r?.nombre;
+}
+
+// Genera links temporales (1 hora) para ver fotos del bucket privado
+async function urlsFirmadas(supabase: Supabase, paths: (string | null)[]) {
+  const validos = paths.filter((p): p is string => !!p);
+  const mapa = new Map<string, string>();
+  if (validos.length === 0) return mapa;
+
+  const { data } = await supabase.storage
+    .from("fotos-reclamos")
+    .createSignedUrls(validos, 3600);
+
+  data?.forEach((d) => {
+    if (d.path && d.signedUrl) mapa.set(d.path, d.signedUrl);
+  });
+  return mapa;
+}
+
+function Foto({ url }: { url?: string }) {
+  if (!url) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt="Foto del reclamo" className="mt-2 max-h-64 rounded-md object-cover" />;
 }
 
 // ---------- ADMINISTRADOR ----------
@@ -86,11 +75,13 @@ async function PanelAdmin({ nombre }: { nombre: string }) {
 
   const { data: reclamos, count: totalReclamos } = await supabase
     .from("reclamos")
-    .select("id, descripcion, estado, created_at, unidades(nombre)", {
+    .select("id, descripcion, estado, created_at, foto_path, unidades(nombre)", {
       count: "exact",
     })
     .order("created_at", { ascending: false })
     .limit(10);
+
+  const fotos = await urlsFirmadas(supabase, (reclamos ?? []).map((r) => r.foto_path));
 
   return (
     <div className="flex flex-col gap-6">
@@ -114,6 +105,7 @@ async function PanelAdmin({ nombre }: { nombre: string }) {
                 Unidad {nombreDe(r.unidades)} · Estado: {r.estado} ·{" "}
                 {new Date(r.created_at).toLocaleDateString("es-UY")}
               </p>
+              <Foto url={r.foto_path ? fotos.get(r.foto_path) : undefined} />
             </div>
           ))
         ) : (
@@ -149,13 +141,15 @@ async function PanelVecino({ nombre }: { nombre: string }) {
   // Por RLS, el vecino solo ve su unidad y sus propios reclamos
   const { data: unidad } = await supabase
     .from("unidades")
-    .select("nombre, edificios(nombre)")
+    .select("id, nombre, edificios(nombre)")
     .maybeSingle();
 
   const { data: reclamos } = await supabase
     .from("reclamos")
-    .select("id, descripcion, estado, created_at")
+    .select("id, descripcion, estado, created_at, foto_path")
     .order("created_at", { ascending: false });
+
+  const fotos = await urlsFirmadas(supabase, (reclamos ?? []).map((r) => r.foto_path));
 
   return (
     <div className="flex flex-col gap-6">
@@ -173,27 +167,7 @@ async function PanelVecino({ nombre }: { nombre: string }) {
         )}
       </div>
 
-      {unidad && (
-        <form action={crearReclamo} className="flex flex-col gap-2 rounded-md border p-4">
-          <label htmlFor="descripcion" className="text-sm font-medium">
-            Nuevo reclamo
-          </label>
-          <textarea
-            id="descripcion"
-            name="descripcion"
-            required
-            rows={3}
-            placeholder="Ej: pierde agua la canilla del baño"
-            className="rounded-md border p-2 text-sm bg-transparent"
-          />
-          <button
-            type="submit"
-            className="self-start rounded-md bg-foreground text-background px-4 py-2 text-sm font-medium"
-          >
-            Enviar reclamo
-          </button>
-        </form>
-      )}
+      {unidad && <NuevoReclamoForm unidadId={unidad.id} />}
 
       <div className="flex flex-col gap-2">
         <h2 className="text-lg font-semibold">Mis reclamos</h2>
@@ -204,6 +178,7 @@ async function PanelVecino({ nombre }: { nombre: string }) {
               <p className="text-sm text-muted-foreground">
                 Estado: {r.estado} · {new Date(r.created_at).toLocaleDateString("es-UY")}
               </p>
+              <Foto url={r.foto_path ? fotos.get(r.foto_path) : undefined} />
             </div>
           ))
         ) : (
