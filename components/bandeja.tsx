@@ -1,171 +1,122 @@
-import { GestionarReclamo } from "@/components/gestionar-reclamo";
+import Link from "next/link";
 import { EstadoChip, UrgenciaMarca } from "@/components/marcas";
-import { Placa } from "@/components/portero-ui";
+import { ESTILO_URGENCIA, Placa } from "@/components/portero-ui";
 import type { ReclamoDetalle } from "@/lib/datos/reclamos";
 import type { Etiquetas } from "@/lib/catalogos";
 import { tiempoRelativo } from "@/lib/fechas";
-import { compararUnidades } from "@/lib/texto";
 
-// Bandeja del administrador: filas de reclamos y vista agrupada por unidad.
-// La recurrencia y la urgencia vienen calculadas de la base (vista reclamos_detalle);
-// acá solo se muestran, para no tener la misma regla escrita dos veces.
+// Lista de la bandeja del administrador. Cada fila es un link que abre el reclamo
+// en el panel de detalle (?r=id), sin perder los filtros.
+// La recurrencia y la urgencia vienen calculadas de la base (vista reclamos_detalle).
 
-type Proveedor = { id: number; nombre: string; categoria: string };
-type PropsFila = {
+type PropsLista = {
+  reclamos: ReclamoDetalle[];
+  seleccionado: number | null;
   ahora: number;
-  fotos: Map<string, string>;
-  proveedores: Proveedor[];
   etiquetas: Etiquetas;
+  hrefDe: (id: number) => string;
+  porUnidad: boolean;
 };
 
-export function VistaPorUnidad({ reclamos, ...props }: { reclamos: ReclamoDetalle[] } & PropsFila) {
+export function ListaReclamos({ reclamos, porUnidad, ...props }: PropsLista) {
+  if (!porUnidad) {
+    return (
+      <ul className="divide-y divide-[#E6E9E4]">
+        {reclamos.map((r) => (
+          <FilaReclamo key={r.id} r={r} mostrarUnidad {...props} />
+        ))}
+      </ul>
+    );
+  }
+
   const grupos = new Map<string, ReclamoDetalle[]>();
   reclamos.forEach((r) => grupos.set(r.unidad, [...(grupos.get(r.unidad) ?? []), r]));
-  const unidades = [...grupos.keys()].sort(compararUnidades);
+  // Las unidades quedan en el orden de su reclamo más urgente (la lista ya viene ordenada)
+  const unidades = [...grupos.keys()];
 
   return (
-    <div className="flex flex-col gap-4">
+    <div>
       {unidades.map((unidad) => {
         const lista = grupos.get(unidad) ?? [];
-        const abiertos = lista.filter((r) => r.estado !== "resuelto").length;
-        const ultimo = lista.reduce((a, b) => (a.created_at > b.created_at ? a : b));
         // El reclamo con más repeticiones de la unidad, si alguno cumple la regla (3 en 30 días)
         const repetido = lista
           .filter((r) => r.repeticiones >= 3 && r.categoria_efectiva)
           .sort((a, b) => b.repeticiones - a.repeticiones)[0];
-
         return (
-          <details key={unidad} open className="group/unidad overflow-hidden rounded-lg border border-[#DDE1DB] bg-white">
-            <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-2 bg-[#FAFBF9] px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1E4D3E] [&::-webkit-details-marker]:hidden">
+          <section key={unidad} aria-label={`Unidad ${unidad}`}>
+            <div className="sticky top-0 z-10 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[#E6E9E4] bg-[#F8F9F7] px-4 py-2">
               <Placa unidad={unidad} />
-              <div className="min-w-0 flex-1">
-                <p className="font-medium">
-                  {lista.length === 1 ? "1 reclamo" : `${lista.length} reclamos`}
-                  {abiertos !== lista.length ? `, ${abiertos} ${abiertos === 1 ? "abierto" : "abiertos"}` : ""}
-                </p>
-                <p className="text-sm text-[#5B655F]">El último, {tiempoRelativo(ultimo.created_at, props.ahora).toLowerCase()}</p>
-                {repetido && (
-                  <AvisoRepetido texto={`${props.etiquetas.categoria(repetido.categoria_efectiva)} (${repetido.repeticiones})`} className="mt-1.5 inline-flex sm:hidden" />
-                )}
-              </div>
+              <span className="text-sm text-[#5B655F]">{lista.length === 1 ? "1 reclamo" : `${lista.length} reclamos`}</span>
               {repetido && (
-                <AvisoRepetido texto={`${props.etiquetas.categoria(repetido.categoria_efectiva)} (${repetido.repeticiones})`} className="hidden sm:inline-flex" />
+                <span
+                  className="ml-auto rounded-full border border-[#D9BC8A] bg-[#F6EAD6] px-2.5 py-0.5 text-xs font-medium text-[#7A4F12]"
+                  title="La misma categoría se repitió 3 o más veces en 30 días"
+                >
+                  Se repite: {props.etiquetas.categoria(repetido.categoria_efectiva)} ({repetido.repeticiones})
+                </span>
               )}
-              <Flecha grupo="unidad" />
-            </summary>
-            <ul className="divide-y divide-[#E6E9E4] border-t border-[#E6E9E4]">
+            </div>
+            <ul className="divide-y divide-[#E6E9E4] border-b border-[#E6E9E4]">
               {lista.map((r) => (
                 <FilaReclamo key={r.id} r={r} {...props} />
               ))}
             </ul>
-          </details>
+          </section>
         );
       })}
     </div>
   );
 }
 
-function AvisoRepetido({ texto, className }: { texto: string; className: string }) {
-  return (
-    <span
-      className={`items-center rounded-full border border-[#D9BC8A] bg-[#F6EAD6] px-2.5 py-0.5 text-xs font-medium text-[#7A4F12] ${className}`}
-      title="La misma categoría se repitió 3 o más veces en 30 días"
-    >
-      Se repite: {texto}
-    </span>
-  );
-}
-
-function Flecha({ grupo }: { grupo?: "unidad" }) {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 20 20"
-      className={`h-4 w-4 shrink-0 text-[#5B655F] transition-transform ${
-        grupo === "unidad" ? "group-open/unidad:rotate-180" : "group-open:rotate-180"
-      }`}
-    >
-      <path d="M5 7.5 10 12.5 15 7.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-export function FilaReclamo({
+function FilaReclamo({
   r,
+  seleccionado,
   ahora,
-  fotos,
-  proveedores,
   etiquetas,
+  hrefDe,
   mostrarUnidad = false,
-}: { r: ReclamoDetalle; mostrarUnidad?: boolean } & PropsFila) {
-  const foto = r.foto_path ? fotos.get(r.foto_path) : undefined;
+}: Omit<PropsLista, "reclamos" | "porUnidad"> & { r: ReclamoDetalle; mostrarUnidad?: boolean }) {
+  const activo = r.id === seleccionado;
   // Urgencia sugerida = todavía no la confirmó el admin
   const sugerida = !r.urgencia && !!r.urgencia_final;
-  const marcas = (
-    <>
-      <UrgenciaMarca urgencia={r.urgencia_final} sugerida={sugerida} />
-      <EstadoChip estado={r.estado} vista="admin" />
-    </>
-  );
+  const color = r.urgencia_final ? ESTILO_URGENCIA[r.urgencia_final]?.color : undefined;
+  const detalle = [
+    tiempoRelativo(r.created_at, ahora),
+    r.categoria_efectiva ? etiquetas.categoria(r.categoria_efectiva) : "Sin clasificar",
+    r.vecino ?? null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <li>
-      <details className="group">
-        <summary className="flex cursor-pointer list-none items-center gap-4 px-4 py-3.5 transition-colors hover:bg-[#F8F9F7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1E4D3E] [&::-webkit-details-marker]:hidden">
-          {mostrarUnidad && <Placa unidad={r.unidad} />}
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium">{r.descripcion}</p>
-            <p className="mt-0.5 text-sm text-[#5B655F]">
-              {tiempoRelativo(r.created_at, ahora)}
-              {r.categoria_efectiva
-                ? `, ${etiquetas.categoria(r.categoria_efectiva)}${r.categoria ? "" : " según la IA"}`
-                : ""}
-              {foto ? ", con foto" : ""}
-              {r.estado === "agendado" && r.ultima_visita
-                ? `, visita el ${new Date(r.ultima_visita).toLocaleString("es-UY", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}`
-                : ""}
+      <Link
+        href={hrefDe(r.id)}
+        aria-current={activo ? "true" : undefined}
+        className={`relative flex items-start gap-3 py-3 pl-5 pr-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1E4D3E] ${
+          activo ? "hover:bg-[#F8F9F7] lg:bg-[#EAF2ED]" : "hover:bg-[#F8F9F7]"
+        }`}
+      >
+        {/* Franja de urgencia: se lee de un vistazo qué es más grave */}
+        <span
+          aria-hidden
+          className="absolute inset-y-2 left-1.5 w-1 rounded-full"
+          style={{ backgroundColor: color ?? "#E1E5DF", opacity: sugerida ? 0.45 : 1 }}
+        />
+        {mostrarUnidad && <Placa unidad={r.unidad} />}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <p className={`line-clamp-2 text-sm leading-snug ${r.estado === "nuevo" ? "font-semibold" : "font-medium"}`}>
+              {r.descripcion}
             </p>
+            <EstadoChip estado={r.estado} vista="admin" />
           </div>
-          <div className="hidden items-center gap-4 sm:flex">{marcas}</div>
-          <Flecha />
-        </summary>
-
-        <div className={`border-t border-[#E6E9E4] bg-[#FAFBF9] px-4 pb-5 pt-4 ${mostrarUnidad ? "sm:pl-[5.25rem]" : ""}`}>
-          <div className="mb-3 flex items-center gap-4 sm:hidden">{marcas}</div>
-          <p className="text-sm text-[#5B655F]">
-            {r.vecino
-              ? `${r.vecino}, unidad ${r.unidad}${r.tipo_vecino !== "estandar" ? ` · vecino ${etiquetas.tipoVecino(r.tipo_vecino).toLowerCase()}` : ""}`
-              : `Unidad ${r.unidad} · reclamo histórico`}
-          </p>
-          {r.descripcion.length > 60 && <p className="mt-2 max-w-prose text-sm">{r.descripcion}</p>}
-          {foto && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={foto}
-              alt={`Foto del reclamo: ${r.descripcion}`}
-              className="mt-3 max-h-72 rounded-md border border-[#DDE1DB] object-cover"
-            />
-          )}
-          <GestionarReclamo
-            reclamo={{
-              id: r.id,
-              categoria: r.categoria,
-              urgencia: r.urgencia,
-              proveedor_id: r.proveedor_id,
-              estado: r.estado,
-            }}
-            proveedores={proveedores}
-            visita={r.ultima_visita}
-            ia={{
-              categoria: r.ia_categoria,
-              urgencia: r.ia_urgencia,
-              proveedor_id: r.ia_proveedor_id,
-              justificacion: r.ia_justificacion,
-            }}
-            prioridad={{ base: r.urgencia_base, calculada: r.urgencia_calculada, motivos: r.motivos ?? [] }}
-          />
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <p className="truncate text-xs text-[#5B655F]">{detalle}</p>
+            <UrgenciaMarca urgencia={r.urgencia_final} sugerida={sugerida} />
+          </div>
         </div>
-      </details>
+      </Link>
     </li>
   );
 }

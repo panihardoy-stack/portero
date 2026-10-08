@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  BOTON_SECUNDARIO,
   ESTILO_ESTADO,
   ESTILO_URGENCIA,
   FUENTE_DISPLAY,
@@ -170,9 +169,6 @@ export function Indicadores({
               </Link>
             ))}
           </nav>
-          <Link href="/protected" className={BOTON_SECUNDARIO}>
-            Volver a reclamos
-          </Link>
         </div>
       </section>
 

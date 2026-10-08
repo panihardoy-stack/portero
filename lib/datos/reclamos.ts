@@ -100,19 +100,28 @@ export async function listarReclamosAdmin(
   return { reclamos: encontrados.sort(ordenarPorPrioridad), truncado: filas.length === LIMITE_BANDEJA };
 }
 
-// Las tres cifras del resumen de la bandeja, contadas en la base
-export async function resumenBandeja(supabase: SupabaseClient) {
+// Cantidad de reclamos por estado y de urgentes abiertos, contados en la base.
+// Alimenta las pestañas de la bandeja.
+export async function contarBandeja(supabase: SupabaseClient, estados: string[]) {
   const contar = () => supabase.from("reclamos_detalle").select("*", { count: "exact", head: true });
-  const [abiertos, sinRevisar, urgentes] = await Promise.all([
-    contar().neq("estado", "resuelto"),
-    contar().eq("estado", "nuevo"),
+  const [urgentes, ...porEstado] = await Promise.all([
     contar().neq("estado", "resuelto").eq("urgencia_final", "alta"),
+    ...estados.map((e) => contar().eq("estado", e)),
   ]);
+  const cantidades = Object.fromEntries(estados.map((e, i) => [e, porEstado[i].count ?? 0]));
+  const total = Object.values(cantidades).reduce((a, b) => a + b, 0);
   return {
-    abiertos: abiertos.count ?? 0,
-    sinRevisar: sinRevisar.count ?? 0,
+    porEstado: cantidades as Record<string, number>,
+    abiertos: total - (cantidades.resuelto ?? 0),
+    total,
     urgentes: urgentes.count ?? 0,
   };
+}
+
+// Un reclamo por id (para el detalle, aunque los filtros lo hayan sacado de la lista)
+export async function obtenerReclamo(supabase: SupabaseClient, id: number) {
+  const { data } = await supabase.from("reclamos_detalle").select(COLUMNAS).eq("id", id).maybeSingle();
+  return (data as unknown as ReclamoDetalle | null) ?? null;
 }
 
 export async function listarReclamosVecino(supabase: SupabaseClient) {

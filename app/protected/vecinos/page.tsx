@@ -1,15 +1,20 @@
-import Link from "next/link";
 import { exigirAdmin } from "@/lib/datos/sesion";
 import { listarVecinosAdmin } from "@/lib/datos/vecinos";
 import { obtenerCatalogos } from "@/lib/datos/catalogos";
 import { ClasificarVecino } from "@/components/clasificar-vecino";
 import { EstadoVacio } from "@/components/estado-vacio";
-import { BOTON_SECUNDARIO, FUENTE_DISPLAY, Placa } from "@/components/portero-ui";
+import { FUENTE_DISPLAY, Placa } from "@/components/portero-ui";
+import { CodigoInvitacion } from "@/components/codigo-invitacion";
 
 // Solo el admin: perfil de cada vecino, que ajusta la urgencia de sus reclamos
 export default async function VecinosPage() {
   const { supabase } = await exigirAdmin();
-  const [vecinos, catalogos] = await Promise.all([listarVecinosAdmin(supabase), obtenerCatalogos()]);
+  const [vecinos, catalogos, edificiosRes] = await Promise.all([
+    listarVecinosAdmin(supabase),
+    obtenerCatalogos(),
+    supabase.from("edificios").select("id, nombre, codigo_invitacion").order("nombre"),
+  ]);
+  const edificios = edificiosRes.data ?? [];
   const conAjuste = catalogos.tiposVecino.filter((t) => t.sube_niveles > 0);
 
   return (
@@ -19,9 +24,11 @@ export default async function VecinosPage() {
           <p className="text-sm text-[#5B655F]">Solo lo ve la administración</p>
           <h1 className={`${FUENTE_DISPLAY} mt-1 text-3xl font-semibold tracking-tight`}>Vecinos</h1>
         </div>
-        <Link href="/protected" className={BOTON_SECUNDARIO}>
-          Volver a reclamos
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          {edificios.map((e) => (
+            <CodigoInvitacion key={e.id} codigo={e.codigo_invitacion} />
+          ))}
+        </div>
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2" aria-label="Cómo afecta cada perfil">
@@ -43,7 +50,7 @@ export default async function VecinosPage() {
       {vecinos.length === 0 ? (
         <EstadoVacio
           titulo="Todavía no hay vecinos en tus edificios"
-          texto="Cuando un vecino se una con el código del edificio, va a aparecer acá."
+          texto="Compartí el código del edificio: cuando un vecino se una con él, aparece acá."
         />
       ) : (
         <ul className="divide-y divide-[#E6E9E4] overflow-hidden rounded-lg border border-[#DDE1DB] bg-white">

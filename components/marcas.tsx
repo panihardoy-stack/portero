@@ -10,7 +10,7 @@ export function EstadoChip({ estado, vista }: { estado: string; vista: "admin" |
   const estilo = ESTILO_ESTADO[estado];
   if (!estilo) return null;
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${estilo.clase}`}>
+    <span className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${estilo.clase}`}>
       {vista === "admin" ? etiquetas.estadoAdmin(estado) : etiquetas.estadoVecino(estado)}
     </span>
   );
@@ -37,7 +37,7 @@ export function UrgenciaMarca({ urgencia, sugerida = false }: { urgencia: string
 }
 
 // Avance del reclamo en pasos, en el orden de la tabla estados
-export function Seguimiento({ estado }: { estado: string }) {
+export function Seguimiento({ estado, vista = "vecino" }: { estado: string; vista?: "admin" | "vecino" }) {
   const { estados } = useCatalogos();
   const actual = estados.findIndex((e) => e.codigo === estado);
   return (
@@ -53,7 +53,7 @@ export function Seguimiento({ estado }: { estado: string }) {
                 esActual ? "font-semibold text-[#18211D]" : hecho ? "text-[#5B655F]" : "text-[#9AA39D]"
               }`}
             >
-              {e.nombre_vecino}
+              {vista === "admin" ? e.nombre_admin : e.nombre_vecino}
             </span>
           </li>
         );
