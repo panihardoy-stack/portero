@@ -24,7 +24,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "select d.id, d.descripcion, d.unidad, d.edificio,\n       coalesce(c.nombre, 'Sin clasificar') as categoria,\n       coalesce(d.ia_justificacion, '') as justificacion,\n       array_to_string(d.motivos, ', ') as motivos,\n       to_char(d.created_at at time zone 'America/Montevideo', 'DD/MM HH24:MI') as recibido\nfrom public.reclamos_detalle d\nleft join public.categorias c on c.codigo = d.categoria_efectiva\nwhere d.aviso_urgente_at is null\n  and d.estado <> 'resuelto'\n  and d.origen = 'app'\n  and d.urgencia_final = 'alta'\norder by d.created_at\nlimit 10;",
+        "query": "select d.id, d.descripcion, d.unidad, d.edificio,\n       adm.email as admin_email,\n       coalesce(c.nombre, 'Sin clasificar') as categoria,\n       coalesce(d.ia_justificacion, '') as justificacion,\n       array_to_string(d.motivos, ', ') as motivos,\n       to_char(d.created_at at time zone 'America/Montevideo', 'DD/MM HH24:MI') as recibido\nfrom public.reclamos_detalle d\njoin public.edificios e on e.id = d.edificio_id\njoin auth.users adm on adm.id = e.admin_id\nleft join public.categorias c on c.codigo = d.categoria_efectiva\nwhere d.aviso_urgente_at is null\n  and d.estado <> 'resuelto'\n  and d.origen = 'app'\n  and d.urgencia_final = 'alta'\norder by d.created_at\nlimit 10;",
         "options": {}
       },
       "id": "8b5fca78-e937-4eb4-99cb-7fb10a4ace6f",
@@ -44,7 +44,7 @@
     },
     {
       "parameters": {
-        "sendTo": "panihardoy@gmail.com",
+        "sendTo": "={{ $json.admin_email }}",
         "subject": "=Reclamo urgente: unidad {{ $json.unidad }}, {{ $json.edificio }}",
         "emailType": "text",
         "message": "=Llegó un reclamo de urgencia alta.\n\nUnidad: {{ $json.unidad }} ({{ $json.edificio }})\nProblema: {{ $json.descripcion }}\nCategoría: {{ $json.categoria }}\nRecibido: {{ $json.recibido }}\n{{ $json.motivos ? 'Subió de urgencia por: ' + $json.motivos : '' }}\n{{ $json.justificacion ? 'Según la IA: ' + $json.justificacion : '' }}\n\nGestionalo en https://portero-indol.vercel.app/protected?urgencia=alta",
