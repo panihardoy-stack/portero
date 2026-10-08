@@ -8,6 +8,7 @@ import {
   type ReclamoDetalle,
 } from "@/lib/datos/reclamos";
 import { urlsFirmadas } from "@/lib/datos/fotos";
+import { calificacionesDe, type Calificacion } from "@/lib/datos/calificaciones";
 import { crearEtiquetas, type Etiquetas } from "@/lib/catalogos";
 import { enlace, leerParametro, type Parametros } from "@/lib/parametros";
 import { FiltrosReclamos, type Conteo } from "@/components/filtros-reclamos";
@@ -48,7 +49,10 @@ export async function PanelAdmin({ sesion, parametros }: { sesion: Sesion; param
     (pedido && (bandeja.reclamos.find((r) => r.id === pedido) ?? (await obtenerReclamo(supabase, pedido)))) ||
     bandeja.reclamos[0] ||
     null;
-  const fotos = abierto?.foto_path ? await urlsFirmadas(supabase, [abierto.foto_path]) : new Map<string, string>();
+  const [fotos, calificaciones] = await Promise.all([
+    abierto?.foto_path ? urlsFirmadas(supabase, [abierto.foto_path]) : new Map<string, string>(),
+    abierto?.estado === "resuelto" ? calificacionesDe(supabase, [abierto.id]) : new Map<number, Calificacion>(),
+  ]);
 
   return (
     <BandejaAdmin
@@ -60,6 +64,7 @@ export async function PanelAdmin({ sesion, parametros }: { sesion: Sesion; param
       abierto={abierto}
       elegido={!!pedido && abierto?.id === pedido}
       foto={abierto?.foto_path ? fotos.get(abierto.foto_path) : undefined}
+      calificacion={abierto ? calificaciones.get(abierto.id) : undefined}
       parametros={parametros}
       etiquetas={etiquetas}
     />
@@ -77,6 +82,7 @@ export function BandejaAdmin({
   abierto,
   elegido,
   foto,
+  calificacion,
   parametros,
   etiquetas,
   ahora = Date.now(),
@@ -89,6 +95,7 @@ export function BandejaAdmin({
   abierto: ReclamoDetalle | null;
   elegido: boolean;
   foto?: string;
+  calificacion?: Calificacion;
   parametros: Parametros;
   etiquetas: Etiquetas;
   ahora?: number;
@@ -151,6 +158,7 @@ export function BandejaAdmin({
               <DetalleReclamo
                 r={abierto}
                 foto={foto}
+                calificacion={calificacion}
                 proveedores={proveedores}
                 etiquetas={etiquetas}
                 hrefVolver={enlace("/protected", parametros, { r: null })}

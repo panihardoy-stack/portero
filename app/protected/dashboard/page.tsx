@@ -1,6 +1,7 @@
 import { exigirAdmin } from "@/lib/datos/sesion";
 import { obtenerCatalogos } from "@/lib/datos/catalogos";
 import { reclamosDesde } from "@/lib/datos/reclamos";
+import { calificacionesDesde } from "@/lib/datos/calificaciones";
 import { leerParametro, type Parametros } from "@/lib/parametros";
 import { Indicadores } from "@/components/indicadores";
 
@@ -15,15 +16,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const desde = new Date(hoy.getFullYear(), hoy.getMonth() - (meses - 1), 1);
 
   // Por RLS, solo trae los datos de los edificios de este admin
-  const [edificiosRes, reclamos, proveedoresRes] = await Promise.all([
+  const [edificiosRes, reclamos, proveedoresRes, calificaciones] = await Promise.all([
     supabase.from("edificios").select("nombre").order("nombre"),
     reclamosDesde(supabase, desde),
     supabase.from("proveedores").select("id, nombre"),
+    calificacionesDesde(supabase, desde),
   ]);
 
   return (
     <Indicadores
       reclamos={reclamos}
+      calificaciones={calificaciones}
       catalogos={catalogos}
       edificios={(edificiosRes.data ?? []).map((e) => e.nombre).join(", ")}
       meses={meses}

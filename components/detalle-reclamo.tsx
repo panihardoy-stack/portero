@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { GestionarReclamo } from "@/components/gestionar-reclamo";
 import { EstadoChip, Seguimiento, UrgenciaMarca } from "@/components/marcas";
-import { FUENTE_DISPLAY, Placa } from "@/components/portero-ui";
+import { Estrellas, FUENTE_DISPLAY, Placa } from "@/components/portero-ui";
+import type { Calificacion } from "@/lib/datos/calificaciones";
 import type { ReclamoDetalle } from "@/lib/datos/reclamos";
 import type { Etiquetas } from "@/lib/catalogos";
 
@@ -11,12 +12,14 @@ type Proveedor = { id: number; nombre: string; categoria: string };
 export function DetalleReclamo({
   r,
   foto,
+  calificacion,
   proveedores,
   etiquetas,
   hrefVolver,
 }: {
   r: ReclamoDetalle;
   foto?: string;
+  calificacion?: Calificacion;
   proveedores: Proveedor[];
   etiquetas: Etiquetas;
   hrefVolver: string;
@@ -65,6 +68,20 @@ export function DetalleReclamo({
       </header>
 
       <Seguimiento estado={r.estado} vista="admin" />
+
+      {r.estado === "resuelto" && r.vecino && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-[#F6F1E6] px-3 py-2.5 text-sm">
+          {calificacion ? (
+            <>
+              <span className="text-[#5B655F]">Calificación del vecino</span>
+              <Estrellas puntaje={calificacion.puntaje} />
+              {calificacion.comentario && <span>“{calificacion.comentario}”</span>}
+            </>
+          ) : (
+            <span className="text-[#5B655F]">El vecino todavía no calificó el arreglo.</span>
+          )}
+        </div>
+      )}
 
       <GestionarReclamo
         // La clave fuerza un formulario nuevo cuando cambia el reclamo o su estado

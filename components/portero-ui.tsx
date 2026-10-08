@@ -52,3 +52,23 @@ export function claseSegmento(activa: boolean) {
     activa ? "bg-[#1E4D3E] text-white" : "text-[#5B655F] hover:text-[#18211D]"
   }`;
 }
+
+// Puntaje de 1 a 5 en estrellas (solo para mostrar; para elegir, ver calificar-reclamo)
+export function Estrellas({ puntaje, tamano = "sm" }: { puntaje: number; tamano?: "sm" | "lg" }) {
+  const lado = tamano === "lg" ? "h-5 w-5" : "h-3.5 w-3.5";
+  return (
+    <span className="inline-flex items-center gap-0.5" role="img" aria-label={`${puntaje} de 5 estrellas`}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <svg key={n} aria-hidden viewBox="0 0 20 20" className={lado}>
+          <path
+            d="M10 1.8l2.5 5.2 5.7.8-4.1 4 1 5.6L10 14.7l-5.1 2.7 1-5.6-4.1-4 5.7-.8z"
+            fill={n <= puntaje ? "#C08A2E" : "none"}
+            stroke={n <= puntaje ? "#C08A2E" : "#B9C0B8"}
+            strokeWidth="1.3"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ))}
+    </span>
+  );
+}

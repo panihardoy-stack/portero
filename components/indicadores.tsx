@@ -3,12 +3,14 @@ import {
   ESTILO_ESTADO,
   ESTILO_URGENCIA,
   FUENTE_DISPLAY,
+  Estrellas,
   GRUPO_SEGMENTOS,
   Placa,
   claseSegmento,
 } from "@/components/portero-ui";
 import { crearEtiquetas, type Catalogos } from "@/lib/catalogos";
 import type { ReclamoDetalle } from "@/lib/datos/reclamos";
+import type { CalificacionConReclamo } from "@/lib/datos/calificaciones";
 import { diasEntre } from "@/lib/fechas";
 
 // Vista del dashboard: recibe los reclamos del período (ya filtrados por RLS) y calcula los indicadores
@@ -27,6 +29,7 @@ const promedio = (lista: Reclamo[]) =>
 
 export function Indicadores({
   reclamos,
+  calificaciones,
   catalogos,
   edificios,
   meses,
@@ -34,6 +37,7 @@ export function Indicadores({
   proveedores,
 }: {
   reclamos: Reclamo[];
+  calificaciones: CalificacionConReclamo[];
   catalogos: Catalogos;
   edificios: string;
   meses: number;
@@ -117,7 +121,16 @@ export function Indicadores({
     .map(([id, nombre]) => {
       const asignados = reclamos.filter((r) => r.proveedor_id === id);
       const hechos = asignados.filter((r) => r.estado === "resuelto" && r.resuelto_at);
-      return { id, nombre, asignados: asignados.length, resueltos: hechos.length, dias: promedio(hechos) };
+      const notas = calificaciones.filter((c) => c.proveedor_id === id);
+      return {
+        id,
+        nombre,
+        asignados: asignados.length,
+        resueltos: hechos.length,
+        dias: promedio(hechos),
+        calificacion: notas.length ? notas.reduce((s, c) => s + c.puntaje, 0) / notas.length : null,
+        calificaciones: notas.length,
+      };
     })
     .filter((p) => p.asignados > 0)
     .sort((a, b) => b.asignados - a.asignados);
@@ -136,6 +149,19 @@ export function Indicadores({
     { etiqueta: "Proveedor", ...compararIA("ia_proveedor_id", "proveedor_id") },
   ];
   const evaluadosIA = acierto[0].evaluados;
+
+  // Satisfacción: calificaciones de los vecinos en el período
+  const promedioPuntaje = calificaciones.length
+    ? calificaciones.reduce((s, c) => s + c.puntaje, 0) / calificaciones.length
+    : 0;
+  const resueltosDeVecinos = resueltos.filter((r) => r.origen === "app" && r.vecino_id);
+  const calificados = new Set(calificaciones.map((c) => c.reclamo_id));
+  const respondieron = resueltosDeVecinos.filter((r) => calificados.has(r.id)).length;
+  const distribucion = [5, 4, 3, 2, 1].map((n) => ({
+    puntaje: n,
+    valor: calificaciones.filter((c) => c.puntaje === n).length,
+  }));
+  const comentarios = calificaciones.filter((c) => c.comentario).slice(0, 3);
 
   const maxMes = Math.max(...porMes.map((m) => m.valor), 1);
   const maxCategoria = Math.max(...porCategoria.map((c) => c.valor), 1);
@@ -342,7 +368,8 @@ export function Indicadores({
                     <th scope="col" className="py-2 pr-3 font-medium">Proveedor</th>
                     <th scope="col" className="px-3 py-2 text-right font-medium">Asignados</th>
                     <th scope="col" className="px-3 py-2 text-right font-medium">Resueltos</th>
-                    <th scope="col" className="py-2 pl-3 text-right font-medium">Días promedio</th>
+                    <th scope="col" className="px-3 py-2 text-right font-medium">Días promedio</th>
+                    <th scope="col" className="py-2 pl-3 text-right font-medium">Calificación</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#EEF0EC]">
@@ -351,8 +378,17 @@ export function Indicadores({
                       <td className="py-2.5 pr-3">{p.nombre}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{p.asignados}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{p.resueltos}</td>
-                      <td className="py-2.5 pl-3 text-right font-medium tabular-nums">
+                      <td className="px-3 py-2.5 text-right font-medium tabular-nums">
                         {p.resueltos > 0 ? unDecimal.format(p.dias) : "Sin datos"}
+                      </td>
+                      <td className="py-2.5 pl-3 text-right tabular-nums">
+                        {p.calificacion !== null ? (
+                          <span title={`${p.calificaciones} ${p.calificaciones === 1 ? "calificación" : "calificaciones"}`}>
+                            {unDecimal.format(p.calificacion)} / 5
+                          </span>
+                        ) : (
+                          <span className="text-[#9AA39D]">Sin datos</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -361,6 +397,61 @@ export function Indicadores({
             </div>
           )}
         </Tarjeta>
+        <Tarjeta
+          titulo="Satisfacción de los vecinos"
+          nota={
+            calificaciones.length > 0
+              ? `${respondieron} de ${resueltosDeVecinos.length} reclamos resueltos de vecinos fueron calificados, de 1 a 5 estrellas.`
+              : "Cuando un reclamo se resuelve, el vecino recibe un mail para calificar el arreglo. Las calificaciones aparecen acá."
+          }
+          className="lg:col-span-5"
+        >
+          {calificaciones.length > 0 && (
+            <div className="mt-5 grid gap-8 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.3fr)]">
+              <div className="flex flex-col gap-2">
+                <span className={`${FUENTE_DISPLAY} text-4xl font-semibold tabular-nums tracking-tight`}>
+                  {unDecimal.format(promedioPuntaje)}
+                  <span className="text-lg font-medium text-[#5B655F]"> / 5</span>
+                </span>
+                <Estrellas puntaje={Math.round(promedioPuntaje)} tamano="lg" />
+                <span className="text-xs text-[#5B655F]">
+                  {calificaciones.length} {calificaciones.length === 1 ? "calificación" : "calificaciones"}
+                </span>
+              </div>
+              <ul className="flex flex-col gap-1.5" aria-label="Calificaciones por cantidad de estrellas">
+                {distribucion.map((d) => (
+                  <li key={d.puntaje} className="flex items-center gap-3 text-sm">
+                    <span className="w-20 shrink-0 whitespace-nowrap text-[#5B655F]">
+                      {d.puntaje} {d.puntaje === 1 ? "estrella" : "estrellas"}
+                    </span>
+                    <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-[#EEF0EC]">
+                      <span
+                        className="block h-full rounded-full bg-[#C08A2E]"
+                        style={{ width: `${(d.valor / calificaciones.length) * 100}%` }}
+                      />
+                    </span>
+                    <span className="w-6 text-right tabular-nums">{d.valor}</span>
+                  </li>
+                ))}
+              </ul>
+              {comentarios.length > 0 && (
+                <ul className="flex flex-col gap-3" aria-label="Últimos comentarios">
+                  {comentarios.map((c) => (
+                    <li key={c.reclamo_id} className="flex flex-col gap-1 border-l-2 border-[#E3D5B8] pl-3">
+                      <Estrellas puntaje={c.puntaje} />
+                      <p className="text-sm">“{c.comentario}”</p>
+                      <p className="text-xs text-[#5B655F]">
+                        {proveedores.get(c.proveedor_id ?? -1) ?? "Sin proveedor"}
+                        {c.categoria ? `, ${etiquetas.categoria(c.categoria).toLowerCase()}` : ""}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </Tarjeta>
+
         <Tarjeta
           titulo="Criterio de prioridad"
           nota={`${subieron.length} de ${total} reclamos subieron de urgencia por el perfil del vecino o por un problema repetido. Un reclamo puede tener los dos motivos.`}

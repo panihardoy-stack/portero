@@ -3,6 +3,8 @@ import type { Sesion } from "@/lib/datos/sesion";
 import { obtenerCatalogos } from "@/lib/datos/catalogos";
 import { listarReclamosVecino } from "@/lib/datos/reclamos";
 import { urlsFirmadas } from "@/lib/datos/fotos";
+import { calificacionesDe } from "@/lib/datos/calificaciones";
+import { CalificarReclamo } from "@/components/calificar-reclamo";
 import { crearEtiquetas } from "@/lib/catalogos";
 import { DIA, diasEntre, tiempoRelativo } from "@/lib/fechas";
 import { leerParametro, type Parametros } from "@/lib/parametros";
@@ -46,7 +48,11 @@ export async function PanelVecino({ sesion, parametros }: { sesion: Sesion; para
   const enCurso = todos.filter((r) => r.estado !== "resuelto");
   const resueltos = todos.filter((r) => r.estado === "resuelto");
   const lista = verResueltos ? resueltos : enCurso;
-  const fotos = await urlsFirmadas(supabase, lista.map((r) => r.foto_path));
+  const [fotos, calificaciones] = await Promise.all([
+    urlsFirmadas(supabase, lista.map((r) => r.foto_path)),
+    calificacionesDe(supabase, resueltos.map((r) => r.id)),
+  ]);
+  const sinCalificar = resueltos.filter((r) => !calificaciones.has(r.id)).length;
   const rel = unidad.edificios as unknown as { nombre: string } | { nombre: string }[] | null;
   const edificio = Array.isArray(rel) ? rel[0]?.nombre : rel?.nombre;
 
@@ -79,6 +85,20 @@ export async function PanelVecino({ sesion, parametros }: { sesion: Sesion; para
               </Link>
             </nav>
           </div>
+
+          {!verResueltos && sinCalificar > 0 && (
+            <Link
+              href="/protected?ver=resueltos"
+              className="flex items-center justify-between gap-3 rounded-lg border border-[#E3D5B8] bg-[#FBF7EE] px-4 py-3 text-sm transition-colors hover:bg-[#F6F1E6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E4D3E]"
+            >
+              <span>
+                {sinCalificar === 1
+                  ? "Tenés 1 reclamo resuelto para calificar."
+                  : `Tenés ${sinCalificar} reclamos resueltos para calificar.`}
+              </span>
+              <span className="font-medium text-[#1E4D3E]">Calificar</span>
+            </Link>
+          )}
 
           {lista.length === 0 ? (
             <EstadoVacio
@@ -135,6 +155,11 @@ export async function PanelVecino({ sesion, parametros }: { sesion: Sesion; para
                       <p className="mt-3 text-sm text-[#265A42]">
                         Resuelto en {dias < 1 ? "menos de un día" : `${unDecimal.format(dias)} ${dias < 1.5 ? "día" : "días"}`}
                       </p>
+                    )}
+                    {r.estado === "resuelto" && (
+                      <div className="mt-3">
+                        <CalificarReclamo reclamoId={r.id} actual={calificaciones.get(r.id) ?? null} />
+                      </div>
                     )}
                   </li>
                 );

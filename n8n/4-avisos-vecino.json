@@ -1,0 +1,136 @@
+{
+  "name": "Portero: avisos al vecino",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "fb1f450b-bc54-460d-bbd1-376aa564c8da",
+      "name": "Cada minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select a.id as aviso_id,\n       au.email as vecino_email,\n       case a.estado\n         when 'asignado' then 'Tu reclamo ya tiene proveedor'\n         when 'agendado' then 'Visita agendada para tu reclamo'\n         else 'Tu reclamo quedó resuelto'\n       end as asunto,\n       'Hola' || coalesce(' ' || split_part(p.nombre, ' ', 1), '') || ':' || chr(10) || chr(10) ||\n       case a.estado\n         when 'asignado' then\n           'Tu reclamo \"' || r.descripcion || '\" (unidad ' || u.nombre || ') ya está asignado a ' ||\n           coalesce(pr.nombre, 'un proveedor') || '. Te avisamos cuando tenga fecha de visita.'\n         when 'agendado' then\n           coalesce(pr.nombre, 'El proveedor') || ' va a ir a la unidad ' || u.nombre || ' el ' ||\n           (array['domingo','lunes','martes','miércoles','jueves','viernes','sábado'])\n             [extract(dow from v.fecha at time zone 'America/Montevideo')::int + 1] || ' ' ||\n           to_char(v.fecha at time zone 'America/Montevideo', 'DD/MM \"a las\" HH24:MI') ||\n           ', por tu reclamo \"' || r.descripcion || '\". Si no vas a poder estar, avisale a la administración.'\n         else\n           'Tu reclamo \"' || r.descripcion || '\" quedó resuelto. ¿Cómo te fue? Calificá el arreglo, te lleva un minuto:' ||\n           chr(10) || 'https://portero-indol.vercel.app/protected?ver=resueltos'\n       end ||\n       chr(10) || chr(10) || 'Administración de ' || e.nombre as mensaje\nfrom public.avisos_vecino a\njoin public.reclamos r on r.id = a.reclamo_id\njoin auth.users au on au.id = r.vecino_id\nleft join public.profiles p on p.id = r.vecino_id\njoin public.unidades u on u.id = r.unidad_id\njoin public.edificios e on e.id = u.edificio_id\nleft join public.proveedores pr on pr.id = r.proveedor_id\nleft join public.visitas v on v.id = a.visita_id\nwhere a.enviado_at is null\n  and a.created_at > now() - interval '2 days'\norder by a.created_at, a.id\nlimit 20;",
+        "options": {}
+      },
+      "id": "a08afd03-746e-4bc8-80d3-6810db4549ae",
+      "name": "Buscar avisos pendientes",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "",
+          "name": "Supabase Portero"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.vecino_email }}",
+        "subject": "={{ $json.asunto }}",
+        "emailType": "text",
+        "message": "={{ $json.mensaje }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "76da992e-fd32-46cb-b5ab-8b60e7095f4a",
+      "name": "Mail al vecino",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        0
+      ],
+      "webhookId": "e8675b4f-ed1c-4e5c-b1b0-c742ddab4372",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail Portero"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update public.avisos_vecino set enviado_at = now() where id = $1;",
+        "options": {
+          "queryReplacement": "={{ $('Buscar avisos pendientes').item.json.aviso_id }}"
+        }
+      },
+      "id": "9a8122e5-894c-49d1-b72d-ad4418e81276",
+      "name": "Marcar como enviado",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        720,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "",
+          "name": "Supabase Portero"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Buscar avisos pendientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar avisos pendientes": {
+      "main": [
+        [
+          {
+            "node": "Mail al vecino",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mail al vecino": {
+      "main": [
+        [
+          {
+            "node": "Marcar como enviado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Montevideo"
+  },
+  "pinData": {}
+}
