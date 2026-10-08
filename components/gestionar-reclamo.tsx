@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { BOTON_PRIMARIO, BOTON_SECUNDARIO } from "@/components/portero-ui";
+import { BOTON_PRIMARIO, BOTON_SECUNDARIO, BOTON_TEXTO, SELECT as SELECT_BASE } from "@/components/portero-ui";
+import { aCampoFecha, fechaCorta, fechaLarga } from "@/lib/fechas";
+
+const SELECT = `${SELECT_BASE} w-full`;
 import { useCatalogos } from "@/components/catalogos-provider";
 
 type Proveedor = { id: number; nombre: string; categoria: string };
@@ -32,27 +35,6 @@ type Cambios = {
   estado?: string;
 };
 
-const SELECT =
-  "h-10 w-full rounded-md border border-[#CFD5CD] bg-white px-3 text-sm text-[#18211D] focus:border-[#1E4D3E] focus:outline-none focus:ring-2 focus:ring-[#1E4D3E]/20";
-
-const BOTON_TEXTO =
-  "rounded px-1 text-sm font-medium text-[#1E4D3E] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E4D3E] disabled:opacity-60";
-
-// Convierte una fecha guardada al formato del campo "fecha y hora" (hora local)
-function aCampoFecha(iso: string | null | undefined) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const dos = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}T${dos(d.getHours())}:${dos(d.getMinutes())}`;
-}
-
-// "viernes 9 de octubre a las 11:00"
-function fechaLarga(iso: string) {
-  const d = new Date(iso);
-  const dia = d.toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long" });
-  const hora = d.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-  return `${dia} a las ${hora}`;
-}
 
 // Gestión de un reclamo: arriba, el próximo paso según el estado (un solo botón);
 // abajo, todos los campos para corregir a mano. Los dos guardan con la misma función.
@@ -343,7 +325,7 @@ export function GestionarReclamo({
       <>
         <Titulo>Reclamo resuelto</Titulo>
         <p className="text-sm text-[#5B655F]">
-          {resueltoAt ? `Se cerró el ${new Date(resueltoAt).toLocaleDateString("es-UY", { day: "numeric", month: "long" })}.` : "Ya está cerrado."}
+          {resueltoAt ? `Se cerró el ${fechaCorta(resueltoAt)}.` : "Ya está cerrado."}
           {" "}Si el problema volvió, reabrilo.
         </p>
         <div>

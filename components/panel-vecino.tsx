@@ -6,7 +6,8 @@ import { urlsFirmadas } from "@/lib/datos/fotos";
 import { calificacionesDe } from "@/lib/datos/calificaciones";
 import { CalificarReclamo } from "@/components/calificar-reclamo";
 import { crearEtiquetas } from "@/lib/catalogos";
-import { DIA, diasEntre, tiempoRelativo } from "@/lib/fechas";
+import { DIA, diasEntre, fechaLarga, tiempoRelativo } from "@/lib/fechas";
+import { hastaUnDecimal } from "@/lib/formato";
 import { leerParametro, type Parametros } from "@/lib/parametros";
 import { NuevoReclamoForm } from "@/components/nuevo-reclamo-form";
 import { UnirseEdificioForm } from "@/components/unirse-edificio-form";
@@ -14,7 +15,6 @@ import { EstadoVacio } from "@/components/estado-vacio";
 import { Seguimiento } from "@/components/marcas";
 import { FUENTE_DISPLAY, GRUPO_SEGMENTOS, Placa, claseSegmento } from "@/components/portero-ui";
 
-const unDecimal = new Intl.NumberFormat("es-UY", { maximumFractionDigits: 1 });
 
 function textoEnviado(iso: string, ahora: number) {
   const t = tiempoRelativo(iso, ahora);
@@ -142,18 +142,12 @@ export async function PanelVecino({ sesion, parametros }: { sesion: Sesion; para
                     {visitaProxima && r.estado !== "resuelto" && (
                       <p className="mt-3 rounded-md bg-[#ECE8F6] px-3 py-2 text-sm text-[#4E3F8A]">
                         Visita del proveedor:{" "}
-                        {new Date(visitaProxima).toLocaleString("es-UY", {
-                          weekday: "long",
-                          day: "numeric",
-                          month: "long",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                        {fechaLarga(visitaProxima)}
                       </p>
                     )}
                     {dias !== null && (
                       <p className="mt-3 text-sm text-[#265A42]">
-                        Resuelto en {dias < 1 ? "menos de un día" : `${unDecimal.format(dias)} ${dias < 1.5 ? "día" : "días"}`}
+                        Resuelto en {dias < 1 ? "menos de un día" : `${hastaUnDecimal.format(dias)} ${dias < 1.5 ? "día" : "días"}`}
                       </p>
                     )}
                     {r.estado === "resuelto" && (

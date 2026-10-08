@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { BOTON_PRIMARIO, CAMPO, Estrellas } from "@/components/portero-ui";
+import { BOTON_PRIMARIO, BOTON_TEXTO, CAMPO, COLOR_ESTRELLA, Estrellas, FORMA_ESTRELLA } from "@/components/portero-ui";
 
 const TEXTOS = ["", "Muy mal", "Mal", "Regular", "Bien", "Muy bien"];
 
@@ -32,7 +32,7 @@ export function CalificarReclamo({
         <button
           type="button"
           onClick={() => setEditando(true)}
-          className="ml-auto rounded px-1 text-sm font-medium text-[#1E4D3E] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E4D3E]"
+          className={`ml-auto ${BOTON_TEXTO}`}
         >
           Cambiar
         </button>
@@ -91,9 +91,9 @@ export function CalificarReclamo({
                 className="h-7 w-7 rounded-sm peer-focus-visible:ring-2 peer-focus-visible:ring-[#1E4D3E]"
               >
                 <path
-                  d="M10 1.8l2.5 5.2 5.7.8-4.1 4 1 5.6L10 14.7l-5.1 2.7 1-5.6-4.1-4 5.7-.8z"
-                  fill={n <= mostrado ? "#C08A2E" : "white"}
-                  stroke={n <= mostrado ? "#C08A2E" : "#B9C0B8"}
+                  d={FORMA_ESTRELLA}
+                  fill={n <= mostrado ? COLOR_ESTRELLA : "white"}
+                  stroke={n <= mostrado ? COLOR_ESTRELLA : "#B9C0B8"}
                   strokeWidth="1.3"
                   strokeLinejoin="round"
                 />
@@ -125,7 +125,7 @@ export function CalificarReclamo({
           <button
             type="button"
             onClick={() => setEditando(false)}
-            className="rounded px-1 text-sm font-medium text-[#5B655F] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E4D3E]"
+            className={`${BOTON_TEXTO} text-[#5B655F]`}
           >
             Cancelar
           </button>

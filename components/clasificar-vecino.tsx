@@ -4,10 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useCatalogos } from "@/components/catalogos-provider";
-import { BOTON_PRIMARIO, CAMPO } from "@/components/portero-ui";
-
-const SELECT =
-  "h-10 rounded-md border border-[#CFD5CD] bg-white px-3 text-sm focus:border-[#1E4D3E] focus:outline-none focus:ring-2 focus:ring-[#1E4D3E]/20";
+import { BOTON_PRIMARIO, CAMPO, SELECT } from "@/components/portero-ui";
 
 export function ClasificarVecino({ vecinoId, tipo, motivo }: { vecinoId: string; tipo: string; motivo: string | null }) {
   const router = useRouter();

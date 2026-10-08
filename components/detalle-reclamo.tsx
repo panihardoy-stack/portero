@@ -5,6 +5,7 @@ import { Estrellas, FUENTE_DISPLAY, Placa } from "@/components/portero-ui";
 import type { Calificacion } from "@/lib/datos/calificaciones";
 import type { ReclamoDetalle } from "@/lib/datos/reclamos";
 import type { Etiquetas } from "@/lib/catalogos";
+import { fechaHora } from "@/lib/fechas";
 
 type Proveedor = { id: number; nombre: string; categoria: string };
 
@@ -24,8 +25,7 @@ export function DetalleReclamo({
   etiquetas: Etiquetas;
   hrefVolver: string;
 }) {
-  const fecha = new Date(r.created_at);
-  const recibido = `${fecha.toLocaleDateString("es-UY", { day: "numeric", month: "long" })}, ${fecha.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}`;
+  const recibido = fechaHora(r.created_at);
   const sugerida = !r.urgencia && !!r.urgencia_final;
 
   return (

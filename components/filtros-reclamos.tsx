@@ -4,10 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCatalogos } from "@/components/catalogos-provider";
-import { GRUPO_SEGMENTOS, claseSegmento } from "@/components/portero-ui";
-
-const SELECT =
-  "h-10 rounded-md border border-[#CFD5CD] bg-white px-3 text-sm text-[#18211D] focus:border-[#1E4D3E] focus:outline-none focus:ring-2 focus:ring-[#1E4D3E]/20";
+import { GRUPO_SEGMENTOS, SELECT, claseSegmento } from "@/components/portero-ui";
 
 const PERIODOS = [
   { valor: "", texto: "Cualquier fecha" },

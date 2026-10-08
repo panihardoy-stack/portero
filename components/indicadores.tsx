@@ -12,13 +12,12 @@ import { crearEtiquetas, type Catalogos } from "@/lib/catalogos";
 import type { ReclamoDetalle } from "@/lib/datos/reclamos";
 import type { CalificacionConReclamo } from "@/lib/datos/calificaciones";
 import { diasEntre } from "@/lib/fechas";
+import { porcentaje, unDecimal } from "@/lib/formato";
 
 // Vista del dashboard: recibe los reclamos del período (ya filtrados por RLS) y calcula los indicadores
 
 type Reclamo = ReclamoDetalle;
 
-const unDecimal = new Intl.NumberFormat("es-UY", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const porcentaje = new Intl.NumberFormat("es-UY", { style: "percent", maximumFractionDigits: 0 });
 
 const FILA_LINK =
   "-mx-2 flex items-center gap-3 rounded-md px-2 py-1 text-sm transition-colors hover:bg-[#F3F4F1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E4D3E]";
@@ -76,9 +75,15 @@ export function Indicadores({
 
   // Criterio de prioridad: cuántos reclamos subieron de urgencia y por qué
   const subieron = reclamos.filter((r) => (r.motivos ?? []).length > 0 && r.urgencia_calculada !== r.urgencia_base);
+  // Los perfiles salen del catálogo: si se agrega uno nuevo en la base, aparece acá solo
+  const porPerfil = (r: Reclamo) => r.motivos.some((m) => m.startsWith("Vecino"));
   const porMotivo = [
-    { etiqueta: "Vecino prioritario", valor: subieron.filter((r) => r.motivos.some((m) => m.startsWith("Vecino prioritario"))).length },
-    { etiqueta: "Vecino conflictivo", valor: subieron.filter((r) => r.motivos.some((m) => m.startsWith("Vecino conflictivo"))).length },
+    ...catalogos.tiposVecino
+      .filter((t) => t.sube_niveles > 0)
+      .map((t) => ({
+        etiqueta: `Vecino ${t.nombre.toLowerCase()}`,
+        valor: subieron.filter((r) => r.tipo_vecino === t.codigo && porPerfil(r)).length,
+      })),
     { etiqueta: "Problema repetido", valor: subieron.filter((r) => r.motivos.some((m) => m.startsWith("Problema"))).length },
   ];
 

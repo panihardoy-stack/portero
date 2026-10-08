@@ -12,6 +12,14 @@ export const BOTON_SECUNDARIO =
 export const CAMPO =
   "w-full rounded-md border border-[#CFD5CD] bg-white px-3 py-2 text-sm text-[#18211D] placeholder:text-[#9AA39D] focus:border-[#1E4D3E] focus:outline-none focus:ring-2 focus:ring-[#1E4D3E]/20";
 
+// Desplegables: mismo estilo en filtros, gestión de reclamos y vecinos
+export const SELECT =
+  "h-10 rounded-md border border-[#CFD5CD] bg-white px-3 text-sm text-[#18211D] focus:border-[#1E4D3E] focus:outline-none focus:ring-2 focus:ring-[#1E4D3E]/20";
+
+// Botón con aspecto de link, para acciones secundarias
+export const BOTON_TEXTO =
+  "rounded px-1 text-sm font-medium text-[#1E4D3E] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E4D3E] disabled:opacity-60";
+
 // Solo presentación: los nombres de estados y urgencias vienen de la base (tablas estados y urgencias).
 // Acá se define únicamente el color de cada código.
 export const ESTILO_ESTADO: Record<string, { clase: string; color: string }> = {
@@ -53,7 +61,11 @@ export function claseSegmento(activa: boolean) {
   }`;
 }
 
-// Puntaje de 1 a 5 en estrellas (solo para mostrar; para elegir, ver calificar-reclamo)
+// Forma de una estrella, la usan Estrellas (mostrar) y CalificarReclamo (elegir)
+export const FORMA_ESTRELLA = "M10 1.8l2.5 5.2 5.7.8-4.1 4 1 5.6L10 14.7l-5.1 2.7 1-5.6-4.1-4 5.7-.8z";
+export const COLOR_ESTRELLA = "#C08A2E";
+
+// Puntaje de 1 a 5 en estrellas (solo para mostrar)
 export function Estrellas({ puntaje, tamano = "sm" }: { puntaje: number; tamano?: "sm" | "lg" }) {
   const lado = tamano === "lg" ? "h-5 w-5" : "h-3.5 w-3.5";
   return (
@@ -61,9 +73,9 @@ export function Estrellas({ puntaje, tamano = "sm" }: { puntaje: number; tamano?
       {[1, 2, 3, 4, 5].map((n) => (
         <svg key={n} aria-hidden viewBox="0 0 20 20" className={lado}>
           <path
-            d="M10 1.8l2.5 5.2 5.7.8-4.1 4 1 5.6L10 14.7l-5.1 2.7 1-5.6-4.1-4 5.7-.8z"
-            fill={n <= puntaje ? "#C08A2E" : "none"}
-            stroke={n <= puntaje ? "#C08A2E" : "#B9C0B8"}
+            d={FORMA_ESTRELLA}
+            fill={n <= puntaje ? COLOR_ESTRELLA : "none"}
+            stroke={n <= puntaje ? COLOR_ESTRELLA : "#B9C0B8"}
             strokeWidth="1.3"
             strokeLinejoin="round"
           />
