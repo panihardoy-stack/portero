@@ -3,15 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import {
-  BOTON_PRIMARIO,
-  CATEGORIAS,
-  CATEGORIA_LABEL,
-  ESTADOS,
-  ESTADO_INFO,
-  URGENCIAS,
-  URGENCIA_INFO,
-} from "@/components/portero-ui";
+import { BOTON_PRIMARIO } from "@/components/portero-ui";
+import { useCatalogos } from "@/components/catalogos-provider";
 
 type Proveedor = { id: number; nombre: string; categoria: string };
 type Reclamo = {
@@ -21,6 +14,9 @@ type Reclamo = {
   proveedor_id: number | null;
   estado: string;
 };
+
+// Lo que calculó la base con las reglas de prioridad (vista reclamos_detalle)
+export type Prioridad = { base: string | null; calculada: string | null; motivos: string[] };
 
 export type SugerenciaIA = {
   categoria: string | null;
@@ -45,12 +41,15 @@ export function GestionarReclamo({
   proveedores,
   ia,
   visita,
+  prioridad,
 }: {
   reclamo: Reclamo;
   proveedores: Proveedor[];
   ia?: SugerenciaIA;
   visita?: string | null;
+  prioridad?: Prioridad;
 }) {
+  const { categorias, urgencias, estados, etiquetas } = useCatalogos();
   const router = useRouter();
   const [categoria, setCategoria] = useState(reclamo.categoria ?? "");
   const [urgencia, setUrgencia] = useState(reclamo.urgencia ?? "");
@@ -110,7 +109,6 @@ export function GestionarReclamo({
     if (estado === "agendado" && fechaVisita !== aCampoFecha(visita)) {
       const { error: errorVisita } = await supabase.from("visitas").insert({
         reclamo_id: reclamo.id,
-        proveedor_id: Number(proveedorId),
         fecha: new Date(fechaVisita).toISOString(),
       });
       if (errorVisita) {
@@ -130,16 +128,19 @@ export function GestionarReclamo({
 
   const hayIA = !!ia?.categoria;
   const proveedorIA = proveedores.find((p) => p.id === ia?.proveedor_id);
+  // La urgencia sugerida es la de la IA ajustada por las reglas de prioridad
+  const urgenciaSugerida = prioridad?.calculada ?? ia?.urgencia ?? null;
+  const subio = !!prioridad?.calculada && !!prioridad.base && prioridad.calculada !== prioridad.base;
   const yaCoincide =
     hayIA &&
     categoria === (ia?.categoria ?? "") &&
-    urgencia === (ia?.urgencia ?? "") &&
+    urgencia === (urgenciaSugerida ?? "") &&
     proveedorId === (ia?.proveedor_id?.toString() ?? "");
 
   function usarSugerencia() {
     if (!ia) return;
     setCategoria(ia.categoria ?? "");
-    setUrgencia(ia.urgencia ?? "");
+    setUrgencia(urgenciaSugerida ?? "");
     setProveedorId(ia.proveedor_id?.toString() ?? "");
     if (estado === "nuevo" && ia.proveedor_id) setEstado("asignado");
     setMensaje(null);
@@ -166,13 +167,19 @@ export function GestionarReclamo({
       {hayIA ? (
         <div className="flex flex-col gap-2 rounded-md border border-[#CFE0D7] bg-[#EEF4F0] p-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-medium text-[#1E4D3E]">Sugerencia de la IA</p>
+            <p className="text-xs font-medium text-[#1E4D3E]">Sugerencia de la IA y las reglas de prioridad</p>
             <p className="mt-0.5 text-sm font-medium">
-              {CATEGORIA_LABEL[ia!.categoria!] ?? ia!.categoria}
-              {ia!.urgencia ? `, urgencia ${URGENCIA_INFO[ia!.urgencia]?.label.toLowerCase()}` : ""}
+              {etiquetas.categoria(ia!.categoria)}
+              {urgenciaSugerida ? `, urgencia ${etiquetas.urgencia(urgenciaSugerida).toLowerCase()}` : ""}
               {proveedorIA ? `, ${proveedorIA.nombre}` : ""}
             </p>
             {ia!.justificacion && <p className="mt-1 text-sm text-[#5B655F]">{ia!.justificacion}</p>}
+            {subio && (
+              <p className="mt-2 text-sm text-[#7A4F12]">
+                Subió de {etiquetas.urgencia(prioridad!.base).toLowerCase()} a{" "}
+                {etiquetas.urgencia(prioridad!.calculada).toLowerCase()}: {prioridad!.motivos.join(" y ").toLowerCase()}.
+              </p>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-3">
             {yaCoincide ? (
@@ -222,9 +229,9 @@ export function GestionarReclamo({
             className={SELECT}
           >
             <option value="">Sin clasificar</option>
-            {CATEGORIAS.map((c) => (
-              <option key={c} value={c}>
-                {CATEGORIA_LABEL[c]}
+            {categorias.map((c) => (
+              <option key={c.codigo} value={c.codigo}>
+                {c.nombre}
               </option>
             ))}
           </select>
@@ -238,9 +245,9 @@ export function GestionarReclamo({
             className={SELECT}
           >
             <option value="">Sin definir</option>
-            {URGENCIAS.map((u) => (
-              <option key={u} value={u}>
-                {URGENCIA_INFO[u].label}
+            {urgencias.map((u) => (
+              <option key={u.codigo} value={u.codigo}>
+                {u.nombre}
               </option>
             ))}
           </select>
@@ -273,9 +280,9 @@ export function GestionarReclamo({
             onChange={(e) => setEstado(e.target.value)}
             className={SELECT}
           >
-            {ESTADOS.map((s) => (
-              <option key={s} value={s}>
-                {ESTADO_INFO[s].admin}
+            {estados.map((e) => (
+              <option key={e.codigo} value={e.codigo}>
+                {e.nombre_admin}
               </option>
             ))}
           </select>

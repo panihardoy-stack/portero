@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { createClient } from "@/lib/supabase/server";
+import { obtenerSesion } from "@/lib/datos/sesion";
+import { obtenerCatalogos } from "@/lib/datos/catalogos";
+import { CatalogosProvider } from "@/components/catalogos-provider";
 import { SalirButton } from "@/components/salir-button";
 import { FUENTE_DISPLAY } from "@/components/portero-ui";
 
@@ -24,31 +26,30 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
           </Suspense>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-5 py-10">{children}</main>
+      <main className="mx-auto max-w-5xl px-5 py-10">
+        <Suspense fallback={<p className="text-sm text-[#5B655F]">Cargando…</p>}>
+          <ConCatalogos>{children}</ConCatalogos>
+        </Suspense>
+      </main>
     </div>
   );
 }
 
-async function Usuario() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+// Los catálogos se leen una vez y quedan disponibles para todas las pantallas
+async function ConCatalogos({ children }: { children: React.ReactNode }) {
+  const catalogos = await obtenerCatalogos();
+  return <CatalogosProvider catalogos={catalogos}>{children}</CatalogosProvider>;
+}
 
-  const { data: perfil } = await supabase
-    .from("profiles")
-    .select("nombre, rol")
-    .eq("id", user.id)
-    .single();
+async function Usuario() {
+  const sesion = await obtenerSesion();
+  if (!sesion) return null;
 
   return (
     <div className="flex items-center gap-4">
       <div className="hidden text-right leading-tight sm:block">
-        <p className="text-sm font-medium">{perfil?.nombre ?? user.email}</p>
-        <p className="text-xs text-[#5B655F]">
-          {perfil?.rol === "admin" ? "Administración" : "Vecino"}
-        </p>
+        <p className="text-sm font-medium">{sesion.nombre}</p>
+        <p className="text-xs text-[#5B655F]">{sesion.esAdmin ? "Administración" : "Vecino"}</p>
       </div>
       <SalirButton />
     </div>

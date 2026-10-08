@@ -1,66 +1,57 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { obtenerSesion } from "@/lib/datos/sesion";
+import { obtenerCatalogos } from "@/lib/datos/catalogos";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { TIPOS_IMAGEN, clasificarReclamo } from "@/lib/ia/clasificar";
+import { MODELO_IA, TIPOS_IMAGEN, clasificarReclamo } from "@/lib/ia/clasificar";
 
-// Clasifica un reclamo con IA y guarda la sugerencia en las columnas ia_*.
+// Clasifica un reclamo con IA y guarda la sugerencia en la tabla sugerencias_ia.
 // La llama el formulario del vecino al enviar, o el admin con "Pedir sugerencia".
 export async function POST(request: Request) {
   const { reclamoId, forzar } = (await request.json().catch(() => ({}))) as {
     reclamoId?: number;
     forzar?: boolean;
   };
-  if (!reclamoId) {
-    return NextResponse.json({ error: "Falta el reclamo." }, { status: 400 });
-  }
+  if (!reclamoId) return NextResponse.json({ error: "Falta el reclamo." }, { status: 400 });
+
+  const sesion = await obtenerSesion();
+  if (!sesion) return NextResponse.json({ error: "Sesión vencida." }, { status: 401 });
 
   // 1. Con los permisos del usuario: RLS confirma que puede ver este reclamo
   //    (el vecino que lo creó o el admin de su edificio)
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Sesión vencida." }, { status: 401 });
-
-  const { data: reclamo } = await supabase
+  const { data: reclamo } = await sesion.supabase
     .from("reclamos")
-    .select("id, descripcion, foto_path, unidad_id, ia_categoria")
+    .select("id, descripcion, foto_path, unidad_id")
     .eq("id", reclamoId)
     .maybeSingle();
   if (!reclamo) return NextResponse.json({ error: "Reclamo no encontrado." }, { status: 404 });
 
-  // Si ya tiene sugerencia, solo el admin puede pedir otra (cada llamada a la IA cuesta)
-  if (reclamo.ia_categoria) {
-    const { data: perfil } = await supabase.from("profiles").select("rol").eq("id", user.id).single();
-    if (!(forzar && perfil?.rol === "admin")) {
-      return NextResponse.json({ ok: true, yaClasificado: true });
-    }
-  }
-
-  // 2. Con permisos de servidor: leer proveedores y la foto, y guardar la sugerencia
+  // 2. Con permisos de servidor: la sugerencia no la puede leer ni escribir el vecino
   const admin = createAdminClient();
 
-  const { data: unidad } = await admin
-    .from("unidades")
-    .select("edificios(admin_id)")
-    .eq("id", reclamo.unidad_id)
-    .single();
+  // Si ya tiene sugerencia, solo el admin puede pedir otra (cada llamada a la IA cuesta)
+  const { data: existente } = await admin
+    .from("sugerencias_ia")
+    .select("reclamo_id")
+    .eq("reclamo_id", reclamo.id)
+    .maybeSingle();
+  if (existente && !(forzar && sesion.esAdmin)) {
+    return NextResponse.json({ ok: true, yaClasificado: true });
+  }
+
+  const { data: unidad } = await admin.from("unidades").select("edificios(admin_id)").eq("id", reclamo.unidad_id).single();
   const rel = unidad?.edificios as unknown as { admin_id: string } | { admin_id: string }[] | null;
   const adminId = Array.isArray(rel) ? rel[0]?.admin_id : rel?.admin_id;
 
-  const { data: proveedores } = await admin
-    .from("proveedores")
-    .select("id, nombre, categoria")
-    .eq("admin_id", adminId ?? "");
+  const [{ data: proveedores }, catalogos] = await Promise.all([
+    admin.from("proveedores").select("id, nombre, categoria").eq("admin_id", adminId ?? ""),
+    obtenerCatalogos(),
+  ]);
 
   let imagen: { mediaType: string; base64: string } | undefined;
   if (reclamo.foto_path) {
     const { data: archivo } = await admin.storage.from("fotos-reclamos").download(reclamo.foto_path);
     if (archivo && (TIPOS_IMAGEN as readonly string[]).includes(archivo.type)) {
-      imagen = {
-        mediaType: archivo.type,
-        base64: Buffer.from(await archivo.arrayBuffer()).toString("base64"),
-      };
+      imagen = { mediaType: archivo.type, base64: Buffer.from(await archivo.arrayBuffer()).toString("base64") };
     }
   }
 
@@ -69,17 +60,19 @@ export async function POST(request: Request) {
       descripcion: reclamo.descripcion,
       imagen,
       proveedores: proveedores ?? [],
+      categorias: catalogos.categorias,
+      urgencias: catalogos.urgencias,
     });
 
-    const { error } = await admin
-      .from("reclamos")
-      .update({
-        ia_categoria: sugerencia.categoria,
-        ia_urgencia: sugerencia.urgencia,
-        ia_proveedor_id: sugerencia.proveedor_id,
-        ia_justificacion: sugerencia.justificacion,
-      })
-      .eq("id", reclamo.id);
+    const { error } = await admin.from("sugerencias_ia").upsert({
+      reclamo_id: reclamo.id,
+      categoria: sugerencia.categoria,
+      urgencia: sugerencia.urgencia,
+      proveedor_id: sugerencia.proveedor_id,
+      justificacion: sugerencia.justificacion,
+      modelo: MODELO_IA,
+      created_at: new Date().toISOString(),
+    });
     if (error) throw new Error(error.message);
 
     return NextResponse.json({ ok: true, sugerencia });

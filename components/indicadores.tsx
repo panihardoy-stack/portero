@@ -1,58 +1,48 @@
 import Link from "next/link";
 import {
   BOTON_SECUNDARIO,
-  CATEGORIAS,
-  CATEGORIA_LABEL,
-  ESTADOS,
-  ESTADO_INFO,
+  ESTILO_ESTADO,
+  ESTILO_URGENCIA,
   FUENTE_DISPLAY,
+  GRUPO_SEGMENTOS,
   Placa,
-  URGENCIAS,
-  URGENCIA_INFO,
+  claseSegmento,
 } from "@/components/portero-ui";
+import { crearEtiquetas, type Catalogos } from "@/lib/catalogos";
+import type { ReclamoDetalle } from "@/lib/datos/reclamos";
+import { diasEntre } from "@/lib/fechas";
 
 // Vista del dashboard: recibe los reclamos del período (ya filtrados por RLS) y calcula los indicadores
 
-export type ReclamoIndicador = {
-  categoria: string | null;
-  urgencia: string | null;
-  estado: string;
-  created_at: string;
-  resuelto_at: string | null;
-  proveedor_id: number | null;
-  ia_categoria: string | null;
-  ia_urgencia: string | null;
-  ia_proveedor_id: number | null;
-  unidad: string;
-};
-type Reclamo = ReclamoIndicador;
+type Reclamo = ReclamoDetalle;
 
-const DIA = 1000 * 60 * 60 * 24;
 const unDecimal = new Intl.NumberFormat("es-UY", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const porcentaje = new Intl.NumberFormat("es-UY", { style: "percent", maximumFractionDigits: 0 });
 
 const FILA_LINK =
   "-mx-2 flex items-center gap-3 rounded-md px-2 py-1 text-sm transition-colors hover:bg-[#F3F4F1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E4D3E]";
 
-const diasResolucion = (r: Reclamo) =>
-  (new Date(r.resuelto_at as string).getTime() - new Date(r.created_at).getTime()) / DIA;
+const diasResolucion = (r: Reclamo) => diasEntre(r.created_at, r.resuelto_at as string);
 const promedio = (lista: Reclamo[]) =>
   lista.length ? lista.reduce((suma, r) => suma + diasResolucion(r), 0) / lista.length : 0;
 
 export function Indicadores({
   reclamos,
+  catalogos,
   edificios,
   meses,
   periodos,
   proveedores,
 }: {
   reclamos: Reclamo[];
+  catalogos: Catalogos;
   edificios: string;
   meses: number;
   periodos: number[];
   proveedores: Map<number, string>;
 }) {
   const diasPeriodo = meses * 31;
+  const etiquetas = crearEtiquetas(catalogos);
 
   // ---------- Indicadores ----------
   const total = reclamos.length;
@@ -60,23 +50,34 @@ export function Indicadores({
   const abiertos = reclamos.filter((r) => r.estado !== "resuelto").length;
 
   // ---------- Agrupaciones ----------
-  const porCategoria = CATEGORIAS.map((c) => ({
-    clave: c,
-    etiqueta: CATEGORIA_LABEL[c],
-    valor: reclamos.filter((r) => r.categoria === c).length,
+  // Categoría efectiva: la del admin o, si todavía no decidió, la de la IA (igual que en la bandeja)
+  const porCategoria = catalogos.categorias.map((c) => ({
+    clave: c.codigo,
+    etiqueta: c.nombre,
+    valor: reclamos.filter((r) => r.categoria_efectiva === c.codigo).length,
   })).sort((a, b) => b.valor - a.valor);
-  const sinClasificar = reclamos.filter((r) => !r.categoria).length;
+  const sinClasificar = reclamos.filter((r) => !r.categoria_efectiva).length;
   if (sinClasificar > 0) porCategoria.push({ clave: "sin", etiqueta: "Sin clasificar", valor: sinClasificar });
 
-  const porEstado = ESTADOS.map((e) => ({
-    estado: e,
-    valor: reclamos.filter((r) => r.estado === e).length,
+  const porEstado = catalogos.estados.map((e) => ({
+    estado: e.codigo,
+    nombre: e.nombre_admin,
+    valor: reclamos.filter((r) => r.estado === e.codigo).length,
   }));
 
-  const porUrgencia = URGENCIAS.map((u) => ({
-    urgencia: u,
-    dias: promedio(resueltos.filter((r) => r.urgencia === u)),
+  const porUrgencia = catalogos.urgencias.map((u) => ({
+    urgencia: u.codigo,
+    nombre: u.nombre,
+    dias: promedio(resueltos.filter((r) => r.urgencia === u.codigo)),
   }));
+
+  // Criterio de prioridad: cuántos reclamos subieron de urgencia y por qué
+  const subieron = reclamos.filter((r) => (r.motivos ?? []).length > 0 && r.urgencia_calculada !== r.urgencia_base);
+  const porMotivo = [
+    { etiqueta: "Vecino prioritario", valor: subieron.filter((r) => r.motivos.some((m) => m.startsWith("Vecino prioritario"))).length },
+    { etiqueta: "Vecino conflictivo", valor: subieron.filter((r) => r.motivos.some((m) => m.startsWith("Vecino conflictivo"))).length },
+    { etiqueta: "Problema repetido", valor: subieron.filter((r) => r.motivos.some((m) => m.startsWith("Problema"))).length },
+  ];
 
   // Reclamos por mes dentro del período (el último está en curso)
   const hoy = new Date();
@@ -100,13 +101,13 @@ export function Indicadores({
   const topUnidades = [...porUnidad.entries()]
     .map(([unidad, lista]) => {
       const conteo = new Map<string, number>();
-      lista.forEach((r) => r.categoria && conteo.set(r.categoria, (conteo.get(r.categoria) ?? 0) + 1));
+      lista.forEach((r) => r.categoria_efectiva && conteo.set(r.categoria_efectiva, (conteo.get(r.categoria_efectiva) ?? 0) + 1));
       const principal = [...conteo.entries()].sort((a, b) => b[1] - a[1])[0];
       return {
         unidad,
         valor: lista.length,
         abiertos: lista.filter((r) => r.estado !== "resuelto").length,
-        principal: principal ? CATEGORIA_LABEL[principal[0]] : undefined,
+        principal: principal ? etiquetas.categoria(principal[0]) : undefined,
       };
     })
     .sort((a, b) => b.valor - a.valor)
@@ -156,16 +157,14 @@ export function Indicadores({
         <div className="flex flex-wrap items-center gap-3">
           <nav
             aria-label="Período"
-            className="inline-flex rounded-md border border-[#CFD5CD] bg-white p-0.5"
+            className={GRUPO_SEGMENTOS}
           >
             {periodos.map((p) => (
               <Link
                 key={p}
                 href={`/protected/dashboard?meses=${p}`}
                 aria-current={p === meses ? "page" : undefined}
-                className={`rounded-[5px] px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E4D3E] ${
-                  p === meses ? "bg-[#1E4D3E] text-white" : "text-[#5B655F] hover:text-[#18211D]"
-                }`}
+                className={claseSegmento(p === meses)}
               >
                 {p === 12 ? "1 año" : `${p} meses`}
               </Link>
@@ -218,7 +217,7 @@ export function Indicadores({
                   key={e.estado}
                   style={{
                     width: `${(e.valor / Math.max(total, 1)) * 100}%`,
-                    backgroundColor: ESTADO_INFO[e.estado].color,
+                    backgroundColor: ESTILO_ESTADO[e.estado]?.color,
                   }}
                 />
               ) : null
@@ -231,9 +230,9 @@ export function Indicadores({
                   <span
                     aria-hidden
                     className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: ESTADO_INFO[e.estado].color }}
+                    style={{ backgroundColor: ESTILO_ESTADO[e.estado]?.color }}
                   />
-                  <span className="flex-1">{ESTADO_INFO[e.estado].admin}</span>
+                  <span className="flex-1">{e.nombre}</span>
                   <span className="font-medium tabular-nums">{e.valor}</span>
                   <span className="w-10 text-right tabular-nums text-[#5B655F]">
                     {porcentaje.format(e.valor / Math.max(total, 1))}
@@ -278,13 +277,13 @@ export function Indicadores({
           <ul className="mt-5 flex flex-col gap-3">
             {porUrgencia.map((u) => (
               <li key={u.urgencia} className="flex items-center gap-3 text-sm">
-                <span className="w-14 shrink-0 text-[#5B655F]">{URGENCIA_INFO[u.urgencia].label}</span>
+                <span className="w-14 shrink-0 text-[#5B655F]">{u.nombre}</span>
                 <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-[#EEF0EC]">
                   <span
                     className="block h-full rounded-full"
                     style={{
                       width: `${(u.dias / maxDias) * 100}%`,
-                      backgroundColor: URGENCIA_INFO[u.urgencia].color,
+                      backgroundColor: ESTILO_URGENCIA[u.urgencia]?.color,
                     }}
                   />
                 </span>
@@ -366,6 +365,29 @@ export function Indicadores({
             </div>
           )}
         </Tarjeta>
+        <Tarjeta
+          titulo="Criterio de prioridad"
+          nota={`${subieron.length} de ${total} reclamos subieron de urgencia por el perfil del vecino o por un problema repetido. Un reclamo puede tener los dos motivos.`}
+          className="lg:col-span-5"
+        >
+          <ul className="mt-5 grid gap-5 sm:grid-cols-3">
+            {porMotivo.map((m) => (
+              <li key={m.etiqueta} className="flex flex-col gap-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-sm text-[#5B655F]">{m.etiqueta}</span>
+                  <span className={`${FUENTE_DISPLAY} text-2xl font-semibold tabular-nums`}>{m.valor}</span>
+                </div>
+                <span className="h-2.5 overflow-hidden rounded-full bg-[#EEF0EC]">
+                  <span
+                    className="block h-full rounded-full bg-[#B07A2A]"
+                    style={{ width: `${(m.valor / Math.max(subieron.length, 1)) * 100}%` }}
+                  />
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Tarjeta>
+
         <Tarjeta
           titulo="Acierto de la IA"
           nota={

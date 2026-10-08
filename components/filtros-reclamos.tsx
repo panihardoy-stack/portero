@@ -3,14 +3,8 @@
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  CATEGORIAS,
-  CATEGORIA_LABEL,
-  ESTADOS,
-  ESTADO_INFO,
-  URGENCIAS,
-  URGENCIA_INFO,
-} from "@/components/portero-ui";
+import { useCatalogos } from "@/components/catalogos-provider";
+import { GRUPO_SEGMENTOS, claseSegmento } from "@/components/portero-ui";
 
 const SELECT =
   "h-10 rounded-md border border-[#CFD5CD] bg-white px-3 text-sm text-[#18211D] focus:border-[#1E4D3E] focus:outline-none focus:ring-2 focus:ring-[#1E4D3E]/20";
@@ -30,6 +24,7 @@ export function FiltrosReclamos() {
   const params = useSearchParams();
   const [pendiente, startTransition] = useTransition();
   const [texto, setTexto] = useState(params.get("q") ?? "");
+  const { categorias, urgencias, estados } = useCatalogos();
 
   const vista = params.get("vista") === "lista" ? "lista" : "unidad";
   const hayFiltros = ["q", "estado", "categoria", "urgencia", "dias"].some((k) => params.get(k));
@@ -76,7 +71,7 @@ export function FiltrosReclamos() {
           />
         </div>
 
-        <div role="group" aria-label="Forma de ver los reclamos" className="inline-flex self-start rounded-md border border-[#CFD5CD] bg-white p-0.5 sm:self-auto">
+        <div role="group" aria-label="Forma de ver los reclamos" className={GRUPO_SEGMENTOS}>
           {[
             { valor: "unidad", texto: "Por unidad" },
             { valor: "lista", texto: "Lista" },
@@ -86,9 +81,7 @@ export function FiltrosReclamos() {
               type="button"
               aria-pressed={vista === v.valor}
               onClick={() => cambiar("vista", v.valor === "unidad" ? "" : v.valor)}
-              className={`rounded-[5px] px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E4D3E] ${
-                vista === v.valor ? "bg-[#1E4D3E] text-white" : "text-[#5B655F] hover:text-[#18211D]"
-              }`}
+              className={claseSegmento(vista === v.valor)}
             >
               {v.texto}
             </button>
@@ -106,9 +99,9 @@ export function FiltrosReclamos() {
         >
           <option value="">Abiertos</option>
           <option value="todos">Todos los estados</option>
-          {ESTADOS.map((e) => (
-            <option key={e} value={e}>
-              {ESTADO_INFO[e].admin}
+          {estados.map((e) => (
+            <option key={e.codigo} value={e.codigo}>
+              {e.nombre_admin}
             </option>
           ))}
         </select>
@@ -121,9 +114,9 @@ export function FiltrosReclamos() {
           className={SELECT}
         >
           <option value="">Todas las categorías</option>
-          {CATEGORIAS.map((c) => (
-            <option key={c} value={c}>
-              {CATEGORIA_LABEL[c]}
+          {categorias.map((c) => (
+            <option key={c.codigo} value={c.codigo}>
+              {c.nombre}
             </option>
           ))}
           <option value="sin">Sin clasificar</option>
@@ -137,9 +130,9 @@ export function FiltrosReclamos() {
           className={SELECT}
         >
           <option value="">Cualquier urgencia</option>
-          {URGENCIAS.map((u) => (
-            <option key={u} value={u}>
-              Urgencia {URGENCIA_INFO[u].label.toLowerCase()}
+          {urgencias.map((u) => (
+            <option key={u.codigo} value={u.codigo}>
+              Urgencia {u.nombre.toLowerCase()}
             </option>
           ))}
         </select>
